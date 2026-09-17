@@ -1026,7 +1026,7 @@
         '<label class="btn ghost small">' + ic("up") + esc(t("settings.import")) + '<input type="file" accept="application/json" data-role="import" hidden></label>' +
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
-        '<p class="fineprint">build v54 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v55 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1112,6 +1112,7 @@
     else if (typeof prefs.freeLeft !== "number") prefs.freeLeft = 10;
     savePrefs(); syncUser(); closeModal();
     toast(t("login.ok", { n: quotaLeft() }));
+    if (window.__pendingPay) { window.__pendingPay = false; showUnlock(); return true; }
     if (session) rerenderQuiz(); else route();
     return true;
   }
@@ -1262,7 +1263,18 @@
       '<div class="q-actions center" style="margin-top:14px"><button class="btn ghost small" data-act="close-modal">' + esc(t("common.close")) + '</button></div>' +
     '</div>';
     document.body.appendChild(m);
-    if (!prefs.token) return;
+    if (!prefs.token) {
+      window.__pendingPay = true;
+      var gload = document.querySelector('[data-role="pay-loading"]');
+      if (gload) gload.remove();
+      var gbox = document.querySelector('[data-role="pay-btns"]');
+      if (gbox) gbox.insertAdjacentHTML("afterbegin",
+        '<button class="btn primary" data-act="register-open">' + esc(t("auth.registerBtn")) + '</button>' +
+        '<button class="btn ghost" data-act="login-open">' + esc(t("auth.loginBtn")) + '</button>');
+      var gnote = document.querySelector('[data-role="pay-note"]');
+      if (gnote) gnote.textContent = t("pay.needLogin");
+      return;
+    }
     payInfo(function (info) {
       var box = document.querySelector('[data-role="pay-btns"]');
       var load = document.querySelector('[data-role="pay-loading"]');
@@ -1430,7 +1442,7 @@
     if (act === "ai-unlock2") { unlockApply(unlockKeyFrom("lk2")); return; }
     if (act === "ai-unlock") { unlockApply(unlockKeyFrom("lkey")); return; }
     if (act === "support") { showSupport(); return; }
-    if (act === "close-modal") { if (el.classList.contains("modal-mask") && e.target !== el) return; closeModal(); return; }
+    if (act === "close-modal") { if (el.classList.contains("modal-mask") && e.target !== el) return; window.__pendingPay = false; closeModal(); return; }
     if (act === "sp-save") { prefs.donateLink = val("sp-link"); prefs.buyUrl = val("sp-buy"); if (document.querySelector('[data-role="sp-api"]')) prefs.apiBase = val("sp-api"); if (document.querySelector('[data-role="sp-gid"]')) prefs.googleClientId = val("sp-gid"); savePrefs(); document.getElementById("view").innerHTML = vSettings(); toast(t("common.saved")); return; }
     if (act === "sp-clear") { prefs.donateQR = ""; savePrefs(); document.getElementById("view").innerHTML = vSettings(); return; }
     if (act === "lic-enable") {
@@ -1502,6 +1514,9 @@
     document.querySelectorAll("[data-i18n]").forEach(function (el) { el.textContent = t(el.getAttribute("data-i18n")); });
     var c = document.getElementById("topcontrols"); if (!c) return;
     c.innerHTML =
+      (aiLoggedIn()
+        ? '<span class="chip">' + esc(prefs.user) + '</span><button class="btn ghost small" data-act="logout">' + esc(t("login.logout")) + '</button>'
+        : '<button class="btn ghost small" data-act="login-open">' + esc(t("auth.loginBtn")) + '</button><button class="btn primary small auth-reg" data-act="register-open">' + esc(t("auth.registerBtn")) + '</button>') +
       '<div class="seg" role="group" aria-label="' + esc(t("settings.contentLang")) + '">' +
         ["zhen", "zh", "en", "de"].map(function (v) { return '<button class="seg-btn' + (prefs.contentLang === v ? " on" : "") + '" data-act="content-lang" data-val="' + v + '">' + esc(t("lang." + v)) + '</button>'; }).join("") + '</div>' +
       '<div class="seg" role="group" aria-label="' + esc(t("settings.uiLang")) + '">' +

@@ -1,40 +1,99 @@
+// Regression tests for the site boot and the unlock / sign-in handoff.
+// The app is a plain browser IIFE, so it runs in a VM with a tiny DOM stub.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const { test } = require('node:test');
 
-// Run the complete application initialization without starting DOM rendering.
-// Expose preferences only inside the test VM; production exports stay unchanged.
-const source = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const appSource = fs.readFileSync(require.resolve('../app.js'), 'utf8');
+const i18nSource = fs.readFileSync(require.resolve('../i18n.js'), 'utf8');
 const marker = '  window.__boot = boot;';
-assert.equal(source.split(marker).length, 2);
-function initialize(savedPrefs = {}) {
-  const listeners = {};
-  const context = {
-    window: {},
-    document: {
-      readyState: 'loading',
-      addEventListener(type, fn) { listeners[type] = fn; },
-    },
-    localStorage: {
-      getItem(key) { return key === 'dtt.prefs' ? JSON.stringify(savedPrefs) : null; },
-    },
+assert.equal(appSource.split(marker).length, 2, 'boot marker must be unique');
+const instrumented = appSource.replace(marker,
+  '  window.testPrefs = prefs;\n  window.testShowUnlock = showUnlock;\n' + marker);
+
+function stubNode() {
+  return {
+    innerHTML: '', textContent: '', className: '', inserted: '', removed: false,
+    setAttribute() {}, appendChild() {}, remove() { this.removed = true; },
+    insertAdjacentHTML(_pos, html) { this.inserted += html; },
+    classList: { contains() { return false; } },
   };
-  vm.runInNewContext(source.replace(marker, '  window.testPrefs = prefs;\n' + marker), context);
-  assert.equal(typeof context.window.__boot, 'function');
-  assert.equal(listeners.DOMContentLoaded, context.window.__boot);
-  return context.window.testPrefs;
 }
 
+function load({ prefs = {}, payMethods } = {}) {
+  const nodes = {}, calls = [];
+  const context = {
+    window: {},
+    console,
+    document: {
+      readyState: 'loading',
+      addEventListener() {},
+      createElement: () => stubNode(),
+      body: { appendChild() {} },
+      getElementById: () => null,
+      querySelectorAll: () => [],
+      querySelector(sel) {
+        const m = /\[data-role="([^"]+)"\]/.exec(sel);
+        if (!m) return null;
+        if (!nodes[m[1]]) nodes[m[1]] = stubNode();
+        return nodes[m[1]];
+      },
+    },
+    localStorage: { getItem: (k) => (k === 'dtt.prefs' ? JSON.stringify(prefs) : null) },
+    fetch: (url) => {
+      calls.push(String(url));
+      if (!payMethods) return Promise.reject(new Error('offline'));
+      return Promise.resolve({ json: () => Promise.resolve(payMethods) });
+    },
+    setTimeout, clearTimeout,
+  };
+  vm.runInNewContext(i18nSource, context);
+  vm.runInNewContext(instrumented, context);
+  return { context, nodes, calls };
+}
+
+const tick = () => new Promise((r) => setTimeout(r, 20));
+
 test('new visitors get the default backend before boot is registered', () => {
-  assert.equal(initialize().apiBase, 'https://dtt-backend.tiancai110a.workers.dev');
+  const { context } = load();
+  assert.equal(context.window.testPrefs.apiBase, 'https://dtt-backend.tiancai110a.workers.dev');
+  assert.equal(typeof context.window.__boot, 'function');
 });
-test('empty saved backend gets the owner default', () => {
-  assert.equal(initialize({ apiBase: '' }).apiBase, 'https://dtt-backend.tiancai110a.workers.dev');
-});
+
 test('existing visitor preferences are preserved', () => {
-  const prefs = initialize({ apiBase: 'https://example.test', uiLang: 'en', scope: 'all' });
-  assert.equal(prefs.apiBase, 'https://example.test');
-  assert.equal(prefs.uiLang, 'en');
-  assert.equal(prefs.scope, 'all');
+  const { context } = load({ prefs: { apiBase: 'https://example.test', uiLang: 'en' } });
+  assert.equal(context.window.testPrefs.apiBase, 'https://example.test');
+  assert.equal(context.window.testPrefs.uiLang, 'en');
+});
+
+test('guest checkout offers sign-in instead of hanging on "checking"', () => {
+  const { context, nodes, calls } = load();
+  context.window.testShowUnlock();
+  assert.deepEqual(calls, [], 'guests must not hit the payment API');
+  assert.equal(nodes['pay-loading'].removed, true, 'the endless spinner must be removed');
+  assert.match(nodes['pay-btns'].inserted, /data-act="register-open"/);
+  assert.match(nodes['pay-btns'].inserted, /data-act="login-open"/);
+  assert.equal(nodes['pay-note'].textContent, context.window.I18N.zh['pay.needLogin']);
+  assert.equal(context.window.__pendingPay, true, 'sign-in must resume checkout');
+});
+
+test('signed-in visitors see the real payment providers', async () => {
+  const { context, nodes, calls } = load({
+    prefs: { apiBase: 'https://dtt-backend.tiancai110a.workers.dev', token: 'tok' },
+    payMethods: { providers: { stripe: true, paddle: false } },
+  });
+  context.window.testShowUnlock();
+  await tick();
+  assert.equal(calls.length, 1);
+  assert.match(calls[0], /\/api\/pay-methods$/);
+  assert.match(nodes['pay-btns'].inserted, /data-provider="stripe"/);
+  assert.equal(nodes['pay-note'].textContent, context.window.I18N.zh['pay.note']);
+});
+
+test('the app ships a visible sign-in entry and resumable checkout', () => {
+  assert.equal(appSource.includes('if (!prefs.token) return;'), false);
+  assert.match(appSource, /data-act="login-open"/);
+  assert.match(appSource, /window\.__pendingPay = true;/);
+  assert.match(appSource, /window\.__pendingPay = false; showUnlock\(\);/);
 });

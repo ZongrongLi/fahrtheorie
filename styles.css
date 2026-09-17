@@ -75,6 +75,7 @@ main{min-width:0;padding:26px 30px 90px;max-width:1120px;}
   .brand small{display:none;}
 }
 @media (min-width:768px){ .tabbar{display:none!important;} }
+@media (max-width:767px){ .topbar .auth-reg{display:none;} }
 
 /* ---------- buttons ---------- */
 .btn{display:inline-flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;border:1px solid transparent;font:600 14.5px/1 var(--sans);cursor:pointer;background:var(--surface-2);color:var(--ink);transition:transform .12s,background .15s,border-color .15s;white-space:nowrap;}
