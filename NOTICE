@@ -1,0 +1,28 @@
+NOTICE — content rights
+
+The application CODE in this repository is licensed under the MIT License (see LICENSE).
+
+The following CONTENT is NOT covered by that license and remains the property of
+its respective rights holders:
+
+  * the driving-theory question catalogue (questions, answer options, correct
+    answers, official explanations) — rights held by TÜV | DEKRA arge tp 21
+    (amtlicher Fragenkatalog für die theoretische Fahrerlaubnisprüfung);
+  * the question figures and videos published with the official catalogue;
+  * German/English question texts, and the machine translations (data/zh.js)
+    derived from them.
+
+The structured dataset in this project was compiled from a publicly available
+collection of the official catalogue. Public availability does not grant a
+right to redistribute, and redistribution — in particular commercial
+redistribution — may require a licence from the rights holders.
+
+Recommended use:
+  * Use the app for your own personal study.
+  * If you publish or commercialise something built on it, ship the CODE and
+    let users supply their own legally obtained catalogue data, or obtain the
+    appropriate licence for the content.
+  * Always defer to the current official catalogue and your driving school.
+
+AI-generated text (e.g. explanations produced at runtime by the configured
+model) is not part of this repository.

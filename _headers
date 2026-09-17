@@ -1,0 +1,11 @@
+# fahrtheorie.homes — Cloudflare Pages 用：自定义 CSP 与缓存（把 <你的后端> 换成你的 Worker 域名）
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://accounts.google.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' https://accounts.google.com https://dtt-backend.tiancai110a.workers.dev; frame-src https://accounts.google.com https://checkout.stripe.com; base-uri 'self'; form-action 'self'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+/index.html
+  Cache-Control: public, max-age=0, must-revalidate
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/data/*
+  Cache-Control: public, max-age=86400
