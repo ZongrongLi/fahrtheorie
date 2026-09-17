@@ -51,7 +51,7 @@
   if (["zh", "en", "de"].indexOf(prefs.explLang) < 0) prefs.explLang = "zh";
   if (["b", "all"].indexOf(prefs.scope) < 0) prefs.scope = "b";
   ["apiBase", "googleClientId", "buyUrl", "donateLink", "donateQR"].forEach(function (k) {
-    if (!prefs[k] && OWNER[k]) prefs[k] = OWNER[k];
+    if (!prefs[k] && (OWNER || {})[k]) prefs[k] = (OWNER || {})[k];
   });
   window.__explLang = prefs.explLang;
   var session = null, aiPanelOpen = {}, aiHist = {}, lastHash = "#/home";
@@ -1025,7 +1025,7 @@
         '<label class="btn ghost small">' + ic("up") + esc(t("settings.import")) + '<input type="file" accept="application/json" data-role="import" hidden></label>' +
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
-        '<p class="fineprint">build v52 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v53 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
