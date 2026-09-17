@@ -34,6 +34,16 @@
     return '<svg class="ic ' + (cls || "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (IC[name] || "") + "</svg>";
   }
 
+  /* Owner defaults must be initialized before preferences are loaded. */
+  var OWNER = {
+    apiBase: "https://dtt-backend.tiancai110a.workers.dev",
+    googleClientId: "",
+    buyUrl: "",
+    donateLink: "",
+    donateQR: "",
+    mediaBase: "https://cdn.jsdelivr.net/gh/ZongrongLi/fahrtheorie-media@master/"
+  };
+
   /* ---------------- state ---------------- */
   var CAT = null, CAT_ALL = null, BY = {}, INDEX = null;
   function isClassB(q) {
@@ -51,7 +61,7 @@
   if (["zh", "en", "de"].indexOf(prefs.explLang) < 0) prefs.explLang = "zh";
   if (["b", "all"].indexOf(prefs.scope) < 0) prefs.scope = "b";
   ["apiBase", "googleClientId", "buyUrl", "donateLink", "donateQR"].forEach(function (k) {
-    if (!prefs[k] && (OWNER || {})[k]) prefs[k] = (OWNER || {})[k];
+    if (!prefs[k] && OWNER[k]) prefs[k] = OWNER[k];
   });
   window.__explLang = prefs.explLang;
   var session = null, aiPanelOpen = {}, aiHist = {}, lastHash = "#/home";
@@ -997,15 +1007,6 @@
 
   /* ---------------- settings ---------------- */
   var LIC_BASE = "";   // owner: your AI proxy base URL (optional legacy path)
-  /* ===== 站长默认值：填这里 → 随代码发布，所有访客都生效 ===== */
-  var OWNER = {
-    apiBase: "https://dtt-backend.tiancai110a.workers.dev",   // 后端地址
-    googleClientId: "",   // Google 登录 Client ID
-    buyUrl: "",           // 解锁/购买链接（Stripe Payment Link / Gumroad）
-    donateLink: "",       // 打赏链接（Ko-fi / BuyMeACoffee）
-    donateQR: "",         // 打赏二维码图片（data:image/png;base64,...）
-    mediaBase: "https://cdn.jsdelivr.net/gh/ZongrongLi/fahrtheorie-media@master/"   // 视频/媒体源（留空则用本站 /media/）
-  };
   function licBase() { return prefs.licBase || LIC_BASE; }
   function aiUnlocked() { return !!(prefs.unlimited || (prefs.lic && licBase())); }
 
@@ -1025,7 +1026,7 @@
         '<label class="btn ghost small">' + ic("up") + esc(t("settings.import")) + '<input type="file" accept="application/json" data-role="import" hidden></label>' +
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
-        '<p class="fineprint">build v53 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v54 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
