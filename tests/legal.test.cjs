@@ -46,6 +46,18 @@ test('refund policy strings exist in every pack', () => {
   }
 });
 
+/* Paddle only shows WeChat Pay once it is enabled in Checkout settings, and Alipay needs a
+   separate Paddle approval we do not have - so the button must not promise Alipay. */
+test('payment labels only promise methods that are actually enabled', () => {
+  const I = packs();
+  for (const lang of LANGS) {
+    const label = I[lang]['pay.paddle'];
+    assert.ok(label, `${lang} lacks pay.paddle`);
+    assert.equal(/alipay|支付宝/i.test(label), false, `${lang}: Alipay is not enabled (needs Paddle approval)`);
+    assert.ok(/wechat|微信/i.test(label), `${lang}: pay.paddle should name WeChat Pay, which is enabled`);
+  }
+});
+
 test('rail footer labels are localised and keep their placeholders', () => {
   const I = packs();
   for (const lang of LANGS) {
