@@ -23,7 +23,7 @@ function stubNode() {
 }
 
 function load({ prefs = {}, payMethods, search = '', checkout } = {}) {
-  const nodes = {}, calls = [], bodies = [], scripts = [];
+  const nodes = {}, calls = [], bodies = [], scripts = [], listeners = {};
   const nav = [];
   const context = {
     window: {},
@@ -36,7 +36,7 @@ function load({ prefs = {}, payMethods, search = '', checkout } = {}) {
     document: {
       documentElement: { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k]; } },
       readyState: 'loading',
-      addEventListener() {},
+      addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); },
       createElement: () => { const n = stubNode(); scripts.push(n); return n; },
       body: { appendChild() {} },
       head: { appendChild() {} },
@@ -65,7 +65,7 @@ function load({ prefs = {}, payMethods, search = '', checkout } = {}) {
   };
   vm.runInNewContext(i18nSource, context);
   vm.runInNewContext(instrumented, context);
-  return { context, nodes, calls, bodies, scripts, nav };
+  return { context, nodes, calls, bodies, scripts, nav, listeners };
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 20));
@@ -214,4 +214,32 @@ test('Stripe still redirects to its hosted checkout session', async () => {
   context.window.testDoCheckout('stripe');
   await tick();
   assert.deepEqual(nav, ['https://checkout.stripe.com/c/pay/cs_test_9']);
+});
+
+/* With two providers live, the unlock entry must offer the choice instead of hard-jumping to
+   Stripe. Observed on production: a signed-in visitor clicking "Unlock unlimited AI" landed on
+   checkout.stripe.com and never saw the Paddle option. This drives the real document handler. */
+function clickAct(listeners, act) {
+  const el = {
+    getAttribute: (k) => (k === 'data-act' ? act : null),
+    classList: { contains() { return false; } },
+    closest(sel) { return sel.indexOf('data-act') >= 0 ? el : null; },
+  };
+  const event = { target: { closest: (sel) => (sel.indexOf('data-act') >= 0 ? el : null) }, preventDefault() {} };
+  (listeners.click || []).forEach((fn) => fn(event));
+}
+
+test('the unlock entry opens the provider chooser when Paddle is available', async () => {
+  const { nodes, nav, listeners } = load({
+    prefs: signedIn,
+    payMethods: { providers: { stripe: true, paddle: true }, paddle_token: 'test_ctk_3' },
+  });
+  assert.ok(listeners.click && listeners.click.length, 'the app must register a document click handler');
+  clickAct(listeners, 'unlock-open');
+  await tick();
+  assert.deepEqual(nav, [], 'clicking unlock must not navigate to Stripe on its own');
+  const box = nodes['pay-btns'];
+  assert.ok(box, 'the chooser dialog must render');
+  assert.match(box.inserted, /data-provider="stripe"/);
+  assert.match(box.inserted, /data-provider="paddle"/);
 });
