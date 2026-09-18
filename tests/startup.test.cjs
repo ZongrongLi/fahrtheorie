@@ -244,3 +244,36 @@ test('the unlock entry opens the provider chooser when Paddle is available', asy
   assert.match(box.inserted, /data-provider="stripe"/);
   assert.match(box.inserted, /data-provider="paddle"/);
 });
+
+/* Paddle.js defaults to the production environment, so a sandbox transaction opened without
+   switching it lands on buy.paddle.com and Paddle renders "Something went wrong".
+   The client-side token prefix carries the environment, so use it. */
+function paddleProbe(token) {
+  const envs = [], opened = [];
+  const { context, nodes } = load({
+    prefs: signedIn,
+    payMethods: { providers: { stripe: false, paddle: true }, paddle_token: token },
+  });
+  context.window.Paddle = {
+    Environment: { set(v) { envs.push(v); } },
+    Initialize() {},
+    Checkout: { open(o) { opened.push(o.transactionId); } },
+  };
+  context.window.testShowUnlock();
+  return { context, nodes, envs, opened };
+}
+
+test('a test_ client-side token selects the Paddle sandbox environment', async () => {
+  const { context, envs, opened } = paddleProbe('test_ctk_env1');
+  context.window.testDoCheckout('paddle');
+  await tick();
+  assert.deepEqual(envs, ['sandbox'], 'Paddle.js must be pointed at sandbox before opening');
+  assert.deepEqual(opened, ['txn_new']);
+});
+
+test('a live_ client-side token selects the production environment', async () => {
+  const { context, envs } = paddleProbe('live_ctk_env2');
+  context.window.testDoCheckout('paddle');
+  await tick();
+  assert.deepEqual(envs, ['production']);
+});

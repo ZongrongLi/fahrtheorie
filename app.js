@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
-        '<p class="fineprint">build v61 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v62 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1239,7 +1239,13 @@
   var paddleLoaded = false, paddleInited = false, paddleQueue = [];
   function paddleRun(token, txnId) {
     if (!window.Paddle || !window.Paddle.Checkout || !txnId) return false;
-    if (!paddleInited) { window.Paddle.Initialize({ token: token }); paddleInited = true; }
+    if (!paddleInited) {
+      // Paddle.js defaults to production; the token prefix says which side to talk to.
+      var env = /^test_/.test(token) ? "sandbox" : "production";
+      if (window.Paddle.Environment && window.Paddle.Environment.set) window.Paddle.Environment.set(env);
+      window.Paddle.Initialize({ token: token });
+      paddleInited = true;
+    }
     window.Paddle.Checkout.open({ transactionId: txnId });
     return true;
   }
