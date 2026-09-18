@@ -109,6 +109,12 @@ default-payment-link step.
    destination + `PADDLE_WEBHOOK_SECRET`**; the sandbox secret will not verify live traffic, and
    fail-closed means live payments would then 503 rather than unlock.
 4. Refund handling: we never revoke `unlimited` (Paddle refunds arrive as `adjustment.*`).
+5. **WeChat Pay cannot appear today** - not a settings problem. Paddle only offers it for
+   `country = CN` **and** a `CNY`/`USD` transaction, and `POST /api/paddle/checkout` never sends a
+   currency, so every transaction inherits the EUR price. Proven both ways in the sandbox: China +
+   EUR shows PayPal and card only; China + CNY (¥38.48) shows a WeChat Pay button. The v64 button
+   label therefore still over-promises; either drop the WeChat wording or pass `currency_code`
+   (plus a CN price override) - product decision, see `dtt-backend/PADDLE-ONBOARDING.md` 第 2.4 步.
 5. Native-speaker review for the eight machine-translated packs.
 
 ## Local development
