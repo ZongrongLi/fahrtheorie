@@ -122,6 +122,14 @@ test('Paddle return URL verifies the transaction', () => {
   assert.deepEqual(JSON.parse(bodies[0]), { transaction_id: 'txn_abc123' });
 });
 
+/* Observed live from the sandbox API on 2026-09-18: Paddle puts _ptxn FIRST and keeps our
+   params after it, i.e. ?_ptxn=txn_...&dtt_paid=1&provider=paddle — not the appended form. */
+test('Paddle return URL verifies when _ptxn comes first', () => {
+  const { calls, bodies } = paidReturn('?_ptxn=txn_01m2v47p7stwy9hda2nhnzr21p&dtt_paid=1&provider=paddle');
+  assert.deepEqual(calls, ['https://dtt-backend.tiancai110a.workers.dev/api/paddle/verify']);
+  assert.deepEqual(JSON.parse(bodies[0]), { transaction_id: 'txn_01m2v47p7stwy9hda2nhnzr21p' });
+});
+
 test('Paddle return URL still verifies when the id is appended after a second ?', () => {
   const { calls, bodies } = paidReturn('?dtt_paid=1&provider=paddle?_ptxn=txn_xyz789');
   assert.match(calls[0], /\/api\/paddle\/verify$/);
