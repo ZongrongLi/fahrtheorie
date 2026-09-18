@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
-        '<p class="fineprint">build v60 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v61 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1249,7 +1249,7 @@
     if (paddleLoaded) return;
     paddleLoaded = true;
     var sc = document.createElement("script");
-    sc.src = "https://cdn.paddle.com/2.0/paddle.js";
+    sc.src = "https://cdn.paddle.com/paddle/v2/paddle.js";
     sc.async = true; sc.defer = true;
     sc.onload = function () {
       var q = paddleQueue; paddleQueue = [];

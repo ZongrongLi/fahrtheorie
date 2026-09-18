@@ -153,6 +153,7 @@ test('a plain visit never triggers a payment verification', () => {
 /* Paddle's transaction.checkout.url is a "open the checkout on this page" URL that needs
    Paddle.js, not a post-payment redirect. So the Paddle button must drive the overlay with the
    transaction id we created; only Stripe may navigate away. */
+const PADDLE_JS = 'https://cdn.paddle.com/paddle/v2/paddle.js'; // /2.0/paddle.js answers 403 - verified 2026-09-18
 const PADDLE_OK = { provider: 'paddle', url: 'https://fahrtheorie.homes/?_ptxn=txn_new&dtt_paid=1&provider=paddle', id: 'txn_new' };
 
 test('the Paddle button opens the Paddle.js overlay instead of navigating away', async () => {
@@ -183,7 +184,7 @@ test('Paddle.js is lazy-loaded once and opens the overlay when it arrives', asyn
   await tick();
   context.window.testDoCheckout('paddle');
   await tick();
-  const pd = scripts.filter((s) => /cdn\.paddle\.com/.test(String(s.src || '')));
+  const pd = scripts.filter((s) => String(s.src || '').indexOf(PADDLE_JS) === 0);
   assert.equal(pd.length, 1, 'exactly one Paddle.js script must be injected');
   assert.equal(JSON.stringify(opened), '[]', 'nothing opens before the script has loaded');
   context.window.Paddle = { Initialize() {}, Checkout: { open(o) { opened.push(o); } } };
