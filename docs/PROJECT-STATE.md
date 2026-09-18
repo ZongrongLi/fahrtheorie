@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-18 (Europe/Berlin). Live build: **v58**.
+Snapshot date: 2026-09-18 (Europe/Berlin). Live build: **v63**.
 
 ## Where things live
 
@@ -10,64 +10,71 @@ Snapshot date: 2026-09-18 (Europe/Berlin). Live build: **v58**.
 | Source repo | https://github.com/ZongrongLi/fahrtheorie (branch `main`) |
 | Video assets | https://github.com/Zongrongli/fahrtheorie-media (branch `master`, 251 mp4, served via jsDelivr) |
 | Backend | https://dtt-backend.tiancai110a.workers.dev (Cloudflare Worker + KV) |
-| Backend source | sibling folder `dtt-backend/` in the AutoClaw workspace (**not** a git repo — only a local copy plus the 2026-09-18 snapshot) |
+| Backend source | sibling folder `dtt-backend/` in the AutoClaw workspace (**not** a git repo; snapshots only) |
 
-## v58 changelog (2026-09-18)
+## v59 - v63: making the Paddle channel actually work
 
-Commit `03bab23`.
+| Build | Commit | What |
+|---|---|---|
+| v59 | `483c3eb` | Open the Paddle checkout through Paddle.js instead of navigating to `checkout.url` |
+| v60 | `f1cdba8` | The unlock entry shows both providers; it used to hard-jump to Stripe |
+| v61 | `f9db7fd` | Load Paddle.js from `cdn.paddle.com/paddle/v2/paddle.js` (the documented `/2.0/` path answers 403) |
+| v62 | `c55c07f` | Fix the environment probes; `Paddle.Environment.set()` from the token prefix |
+| v63 | `862eba7` | `checkout.completed` posts the transaction id to `/api/paddle/verify` |
 
-1. **Dedicated refund and withdrawal policy** (`refunds.html`, zh + en + a German
-   `Widerrufsbelehrung` annex). Paddle review asks for privacy + terms + refund pages as
-   three separate URLs; the refund rules previously lived only inside `terms.html`.
-2. **Withdrawal notice before payment.** The unlock dialog now states the 14-day window and
-   that generating the first AI explanation ends the withdrawal right (key `ai.refundNote`),
-   and links the policy. The dialog is the only place a buyer sees before Stripe/Paddle.
-3. **Legal links everywhere they are needed**: rail footer, home footer (the rail is hidden
-   below 768px, so phones had no legal links at all) and the About card. `legal.terms` no
-   longer reads "and refunds" now that refunds has its own page, so the three labels stay
-   distinct in all ten languages.
-4. **Site icons**: `favicon.svg`, `favicon.png`, `favicon.ico`, `apple-touch-icon.png` and
-   `theme-color`, linked from all four HTML pages. `https://fahrtheorie.homes/favicon.ico`
-   was a 404 before.
-5. **Rail footer and tab title follow the interface language** (`rail.bankVersion`,
-   `rail.counts`, `document.title`), which removes the last always-Chinese text in the
-   sidebar and fixes the browser tab for de/ar/ru/... users.
-6. **`tests/legal.test.cjs`** (9 checks): pack alignment, legal cross-links, the pre-payment
-   withdrawal notice and the manual version triple (`?v=NN` + rail badge + About badge).
+Why this was needed: Paddle's `transaction.checkout.url` means "open the checkout on this page"
+and requires Paddle.js - it is not a post-payment redirect like Stripe's session URL. Verified
+against the Paddle sandbox: the first attempt loaded `buy.paddle.com` (production) for a sandbox
+transaction and Paddle rendered "Something went wrong"; after `Paddle.Environment.set('sandbox')`
+the overlay came from `sandbox-buy.paddle.com` and a real test-card payment completed.
 
-i18n is now 325 keys x 10 packs, aligned and free of empty values.
-Packs `de/ru/tr/uk/pl/ro/vi/ar` are machine translated; German was spot-checked manually.
-Note: the `de` pack still carries the English `app.name` ("German Theory Trainer"), so the
-German tab title reads in English.
+Also required on the account side (found live, not in our code): **Checkout settings -> Default
+payment link** must be set, or `POST /transactions` fails with
+`transaction_default_checkout_url_not_set`. And a newly created price defaults to a recurring
+period - it has to be edited to one-time.
+
+Backend changes shipped with this (`dtt-backend/worker.js`, deployed):
+
+- `GET /api/pay-methods` now returns `paddle_token` (the client-side token) so the front end can
+  initialise Paddle.js; empty means the old redirect behaviour remains.
+- Paddle webhook verification accepts the multiple `h1` values Paddle sends during secret rotation,
+  rejects timestamps outside a tolerance window (`PADDLE_WEBHOOK_TOLERANCE`, default 300s), and both
+  providers now compare signatures in constant time.
+- `transaction.billed` (manual invoice, awaiting payment) no longer unlocks; only `paid` / `completed`.
+
+## Current payment state
+
+| Provider | State |
+|---|---|
+| Stripe | **test key** (`pk_test`/`sk_test`) + test webhook; live account still not activated |
+| Paddle | **sandbox** (`PADDLE_ENV=sandbox`, `test_` client token); live account not started |
+
+So both buttons on the live site are test-mode. Switching to real money needs: Stripe account
+activation + live key + live webhook, and a Paddle live account (self-serve signup, then
+identity verification; individuals are accepted) with a live price rebuilt and its own
+default-payment-link step.
 
 ## Verification evidence
 
-- `node --check app.js ai.js i18n.js` passes.
-- `tests/startup.test.cjs` 5 passed, `tests/ai-lang.test.cjs` 6 passed, `tests/legal.test.cjs` 9 passed.
-- `dtt-backend`: `node test.mjs` -> 53 passed (backend untouched in v58).
-- Browser (local 8123 and live): German UI renders `Katalog 2025-04-01 / Klasse B 1264 ·
-  gesamt 2413 / build v58` and `Datenschutzerklärung · Nutzungsbedingungen · Widerruf &
-  Erstattung`; the unlock dialog shows the withdrawal note; Arabic UI sets `lang="ar"
-  dir="rtl"`; the 390x844 mobile view exposes the three legal links in the home footer.
-- Live: `https://fahrtheorie.homes` serves `build v58`; md5 of `app.js`, `i18n.js`,
-  `index.html`, `refunds.html`, `privacy.html`, `terms.html` and the four icon files matches
-  the local files byte for byte; `/favicon.ico` returns 200 `image/vnd.microsoft.icon`;
-  TLS `CN=fahrtheorie.homes`, expires 2026-12-16.
-- Screenshots (outside this repo): `~/Documents/Codex/2026-09-17/users-zongrongli-openclaw-autoclaw-workspace-fahrtheorie-2/outputs/dtt_v58_*.png`
-  — `de`, `unlock_de`, `refunds`, `ar`, `mobile`, `live_de`, `live_refunds`.
-- Pre-change whole-tree snapshot (also outside this repo):
-  `~/Documents/Codex/2026-09-17/users-zongrongli-openclaw-autoclaw-workspace-fahrtheorie-2/work/backups/2026-09-18-1713-pre-v58/`
-  (website exported from commit `ad04de9` + a copy of the backend folder),
-  indexed by `work/backups/README.md` next to it.
+- Front end: `node tests/startup.test.cjs` 18, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 9 -> **33 passed, 0 failed**
+- Backend: `dtt-backend` `node test.mjs` -> **63 passed, 0 failed** (was 53 before this work)
+- Real sandbox payment on the live site: transaction `txn_01m2v6755skgkrrxnnzvwh3nb2`,
+  status `completed`, EUR 5.00, `custom_data.uid` preserved end to end;
+  `POST /api/paddle/verify` with that id returned `{"ok":true,"unlimited":true,"provider":"paddle"}`,
+  `GET /api/me` then showed `unlimited:true`, and a second account verifying the same transaction
+  got **403**. Screenshots: `outputs/dtt_v62_*.png`, `dtt_v61_paddle_overlay.png`.
+- Live site serves `build v63`; `app.js` contains `eventCallback` and the v2 CDN URL.
+- KV cleaned afterwards: the two throwaway accounts (6 keys) were deleted, back to the 8-key baseline.
 
 ## Open items
 
-1. Stripe still runs on a test key. Live key and live webhook pending account activation.
-2. Paddle: no account yet. All three policy pages now exist, so the review can be submitted
-   once an account and a `pri_` price id exist.
-3. Donation QR code / link not supplied yet.
-4. Native-speaker review for the eight machine-translated packs.
-5. `dtt-backend/` has no git history — only the 2026-09-18 snapshot. Worth a private repo.
+1. Stripe live key + live webhook (blocked on account activation).
+2. Paddle live account, live price, live client-side token, then flip `PADDLE_ENV` and redeploy.
+3. Paddle webhook is not registered yet - the unlock currently relies on the browser callback.
+   Register `transaction.paid` + `transaction.completed` on the live account and set
+   `PADDLE_WEBHOOK_SECRET` so a closed tab still unlocks.
+4. Refund handling: we never revoke `unlimited` (Paddle refunds arrive as `adjustment.*`).
+5. Native-speaker review for the eight machine-translated packs.
 
 ## Local development
 
@@ -83,4 +90,4 @@ node tests/startup.test.cjs && node tests/ai-lang.test.cjs && node tests/legal.t
 git add -A && git commit -m "build vNN: ..." && git push origin main
 ```
 
-Backend deploy and secrets: see `../dtt-backend/README.md`.
+Backend deploy and secrets: see `../dtt-backend/README.md` and `../dtt-backend/PADDLE-ONBOARDING.md`.
