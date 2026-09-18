@@ -268,6 +268,8 @@ window.I18N = {
     "settings.aiFetchFail": "获取失败：{msg}",
     "settings.about": "关于",
     "settings.aboutText": "本应用为学习工具，题目与答案来自官方理论考试题库（DE 原文 + EN 译文）。请以官方最新题库与驾校教材为准。",
+    "legal.privacy": "隐私政策",
+    "legal.terms": "服务条款与退款",
 
     "lang.zhen": "中英双语",
     "lang.zh": "中文",
@@ -607,6 +609,8 @@ window.I18N = {
     "settings.aiFetchFail": "Fetch failed: {msg}",
     "settings.about": "About",
     "settings.aboutText": "This is a study tool. Questions and answers come from the official theory-exam catalogue (German original + English translation). Always defer to the current official catalogue and your driving school.",
+    "legal.privacy": "Privacy policy",
+    "legal.terms": "Terms & refunds",
 
     "lang.zhen": "中文 + English",
     "lang.zh": "中文",

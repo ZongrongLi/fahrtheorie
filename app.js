@@ -37,7 +37,7 @@
   /* Owner defaults must be initialized before preferences are loaded. */
   var OWNER = {
     apiBase: "https://dtt-backend.tiancai110a.workers.dev",
-    googleClientId: "",
+    googleClientId: "29994549332-tbejncn8vrmvcs5jh51u7o845volaugv.apps.googleusercontent.com",
     buyUrl: "",
     donateLink: "",
     donateQR: "",
@@ -1026,7 +1026,8 @@
         '<label class="btn ghost small">' + ic("up") + esc(t("settings.import")) + '<input type="file" accept="application/json" data-role="import" hidden></label>' +
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
-        '<p class="fineprint">build v55 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a></p>' +
+        '<p class="fineprint">build v56 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
