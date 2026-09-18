@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
-        '<p class="fineprint">build v62 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v63 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1236,16 +1236,24 @@
       .catch(function () { toast(t("err.backend")); showUnlock(); });
   }
   /* Paddle.js is only fetched when someone actually pays with Paddle. */
-  var paddleLoaded = false, paddleInited = false, paddleQueue = [];
+  var paddleLoaded = false, paddleInited = false, paddleQueue = [], paddleTxn = "";
+  function paddleEvent(ev) {
+    var name = (ev && ev.event) || "";
+    if (name.indexOf("checkout.completed") < 0) return;
+    var d = (ev && ev.data) || {};
+    var id = String(d.id || d.transactionId || d.transaction_id || paddleTxn || "");
+    if (id) verifyPayment({ transaction_id: id });
+  }
   function paddleRun(token, txnId) {
     if (!window.Paddle || !window.Paddle.Checkout || !txnId) return false;
     if (!paddleInited) {
       // Paddle.js defaults to production; the token prefix says which side to talk to.
       var env = /^test_/.test(token) ? "sandbox" : "production";
       if (window.Paddle.Environment && window.Paddle.Environment.set) window.Paddle.Environment.set(env);
-      window.Paddle.Initialize({ token: token });
+      window.Paddle.Initialize({ token: token, eventCallback: paddleEvent });
       paddleInited = true;
     }
+    paddleTxn = txnId;
     window.Paddle.Checkout.open({ transactionId: txnId });
     return true;
   }

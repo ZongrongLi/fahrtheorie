@@ -282,3 +282,52 @@ test('a live_ client-side token selects the production environment', async () =>
   const { envs } = await probePaddle('live_ctk_env2');
   assert.deepEqual(envs, ['production']);
 });
+
+/* Payment is not finished until our backend unlocks the account: Paddle hands the result back
+   through the Initialize eventCallback, so checkout.completed must trigger /api/paddle/verify.
+   Proven necessary by a real sandbox payment that completed on Paddle's side (status completed,
+   custom_data.uid intact) while the account stayed unlimited:false. */
+test('checkout.completed verifies the transaction with our backend', async () => {
+  const init = [];
+  const { context, calls, bodies } = load({
+    prefs: signedIn,
+    payMethods: { providers: { stripe: false, paddle: true }, paddle_token: 'test_ctk_evt' },
+    checkout: PADDLE_OK,
+  });
+  context.window.Paddle = {
+    Environment: { set() {} },
+    Initialize(o) { init.push(o); },
+    Checkout: { open() {} },
+  };
+  context.window.testShowUnlock();
+  await tick();
+  context.window.testDoCheckout('paddle');
+  await tick();
+  assert.equal(init.length, 1, 'Paddle.js must be initialised once');
+  assert.equal(typeof init[0].eventCallback, 'function', 'an eventCallback must be registered');
+
+  calls.length = 0; bodies.length = 0;
+  init[0].eventCallback({ event: 'checkout.completed', data: { id: 'txn_new' } });
+  await tick();
+  assert.deepEqual(calls, ['https://dtt-backend.tiancai110a.workers.dev/api/paddle/verify']);
+  assert.deepEqual(JSON.parse(bodies[0]), { transaction_id: 'txn_new' });
+});
+
+test('unrelated Paddle events do not trigger a verification', async () => {
+  const init = [];
+  const { context, calls } = load({
+    prefs: signedIn,
+    payMethods: { providers: { stripe: false, paddle: true }, paddle_token: 'test_ctk_evt2' },
+    checkout: PADDLE_OK,
+  });
+  context.window.Paddle = { Environment: { set() {} }, Initialize(o) { init.push(o); }, Checkout: { open() {} } };
+  context.window.testShowUnlock();
+  await tick();
+  context.window.testDoCheckout('paddle');
+  await tick();
+  calls.length = 0;
+  init[0].eventCallback({ event: 'checkout.start', data: {} });
+  init[0].eventCallback({ event: 'theme.changed' });
+  await tick();
+  assert.deepEqual(calls, [], 'only checkout.completed may call the verifier');
+});
