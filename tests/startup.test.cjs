@@ -11,31 +11,36 @@ const marker = '  window.__boot = boot;';
 assert.equal(appSource.split(marker).length, 2, 'boot marker must be unique');
 const instrumented = appSource.replace(marker,
   '  window.testPrefs = prefs;\n  window.testShowUnlock = showUnlock;\n' +
-  '  window.testHandlePaidReturn = handlePaidReturn;\n' + marker);
+  '  window.testHandlePaidReturn = handlePaidReturn;\n  window.testDoCheckout = doCheckout;\n' + marker);
 
 function stubNode() {
   return {
     innerHTML: '', textContent: '', className: '', inserted: '', removed: false,
     setAttribute() {}, appendChild() {}, remove() { this.removed = true; },
     insertAdjacentHTML(_pos, html) { this.inserted += html; },
-    classList: { contains() { return false; } },
+    classList: { contains() { return false; }, add() {}, remove() {}, toggle() {} },
   };
 }
 
-function load({ prefs = {}, payMethods, search = '' } = {}) {
-  const nodes = {}, calls = [], bodies = [];
+function load({ prefs = {}, payMethods, search = '', checkout } = {}) {
+  const nodes = {}, calls = [], bodies = [], scripts = [];
+  const nav = [];
   const context = {
     window: {},
     console,
-    location: { search, hash: '#/home', pathname: '/', href: '' },
+    location: {
+      search, hash: '#/home', pathname: '/',
+      get href() { return ''; }, set href(v) { nav.push(String(v)); },
+    },
     history: { replaceState() {} },
     document: {
       documentElement: { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k]; } },
       readyState: 'loading',
       addEventListener() {},
-      createElement: () => stubNode(),
+      createElement: () => { const n = stubNode(); scripts.push(n); return n; },
       body: { appendChild() {} },
-      getElementById: () => null,
+      head: { appendChild() {} },
+      getElementById(id) { if (!nodes['#' + id]) nodes['#' + id] = stubNode(); return nodes['#' + id]; },
       querySelectorAll: () => [],
       querySelector(sel) {
         const m = /\[data-role="([^"]+)"\]/.exec(sel);
@@ -50,6 +55,9 @@ function load({ prefs = {}, payMethods, search = '' } = {}) {
       bodies.push(init && init.body ? String(init.body) : '');
       // 回跳类请求只断言"发了什么"，响应直接失败：verifyPayment 的 catch 会静默收尾，不级联刷新
       if (String(url).includes('/verify')) return Promise.reject(new Error('assert-request-only'));
+      if (/\/checkout$|\/paddle\/checkout$/.test(String(url)) && checkout) {
+        return Promise.resolve({ json: () => Promise.resolve(checkout) });
+      }
       if (!payMethods) return Promise.reject(new Error('offline'));
       return Promise.resolve({ json: () => Promise.resolve(payMethods) });
     },
@@ -57,7 +65,7 @@ function load({ prefs = {}, payMethods, search = '' } = {}) {
   };
   vm.runInNewContext(i18nSource, context);
   vm.runInNewContext(instrumented, context);
-  return { context, nodes, calls, bodies };
+  return { context, nodes, calls, bodies, scripts, nav };
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 20));
@@ -140,4 +148,70 @@ test('a plain visit never triggers a payment verification', () => {
   assert.deepEqual(paidReturn('').calls, []);
   assert.deepEqual(paidReturn('?dtt_paid=1&session_id=cs_test_1').calls,
     ['https://dtt-backend.tiancai110a.workers.dev/api/verify-payment']);
+});
+
+/* Paddle's transaction.checkout.url is a "open the checkout on this page" URL that needs
+   Paddle.js, not a post-payment redirect. So the Paddle button must drive the overlay with the
+   transaction id we created; only Stripe may navigate away. */
+const PADDLE_OK = { provider: 'paddle', url: 'https://fahrtheorie.homes/?_ptxn=txn_new&dtt_paid=1&provider=paddle', id: 'txn_new' };
+
+test('the Paddle button opens the Paddle.js overlay instead of navigating away', async () => {
+  const opened = [], inits = [];
+  const { context, nav } = load({
+    prefs: signedIn,
+    payMethods: { providers: { stripe: false, paddle: true }, paddle_token: 'test_ctk_1' },
+    checkout: PADDLE_OK,
+  });
+  context.window.Paddle = { Initialize(o) { inits.push(o); }, Checkout: { open(o) { opened.push(o); } } };
+  context.window.testShowUnlock();          // the button only exists after /api/pay-methods resolved
+  await tick();
+  context.window.testDoCheckout('paddle');
+  await tick();
+  assert.equal(JSON.stringify(inits), JSON.stringify([{ token: 'test_ctk_1' }]), 'Paddle.js must be initialised with the client-side token');
+  assert.equal(JSON.stringify(opened), JSON.stringify([{ transactionId: 'txn_new' }]), 'the overlay must open for our transaction');
+  assert.deepEqual(nav, [], 'the customer must not be sent away from the site');
+});
+
+test('Paddle.js is lazy-loaded once and opens the overlay when it arrives', async () => {
+  const opened = [];
+  const { context, scripts, nav } = load({
+    prefs: signedIn,
+    payMethods: { providers: { stripe: false, paddle: true }, paddle_token: 'test_ctk_2' },
+    checkout: PADDLE_OK,
+  });
+  context.window.testShowUnlock();
+  await tick();
+  context.window.testDoCheckout('paddle');
+  await tick();
+  const pd = scripts.filter((s) => /cdn\.paddle\.com/.test(String(s.src || '')));
+  assert.equal(pd.length, 1, 'exactly one Paddle.js script must be injected');
+  assert.equal(JSON.stringify(opened), '[]', 'nothing opens before the script has loaded');
+  context.window.Paddle = { Initialize() {}, Checkout: { open(o) { opened.push(o); } } };
+  pd[0].onload();
+  await tick();
+  assert.equal(JSON.stringify(opened), JSON.stringify([{ transactionId: 'txn_new' }]));
+  assert.deepEqual(nav, []);
+});
+
+test('a missing client-side token falls back to the returned checkout URL', async () => {
+  const { context, nav, scripts } = load({
+    prefs: signedIn,
+    payMethods: { providers: { stripe: false, paddle: true } },
+    checkout: PADDLE_OK,
+  });
+  context.window.testDoCheckout('paddle');
+  await tick();
+  assert.deepEqual(scripts.filter((s) => /cdn\.paddle\.com/.test(String(s.src || ''))), [], 'no Paddle.js without a token');
+  assert.deepEqual(nav, [PADDLE_OK.url], 'without a token the old redirect behaviour must remain');
+});
+
+test('Stripe still redirects to its hosted checkout session', async () => {
+  const { context, nav } = load({
+    prefs: signedIn,
+    payMethods: { providers: { stripe: true, paddle: false } },
+    checkout: { provider: 'stripe', url: 'https://checkout.stripe.com/c/pay/cs_test_9', id: 'cs_test_9' },
+  });
+  context.window.testDoCheckout('stripe');
+  await tick();
+  assert.deepEqual(nav, ['https://checkout.stripe.com/c/pay/cs_test_9']);
 });

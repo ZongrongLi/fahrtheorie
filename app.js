@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
-        '<p class="fineprint">build v58 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v59 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1225,8 +1225,41 @@
       method: "POST", headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token }, body: "{}"
     })
       .then(function (r) { return r.json(); })
-      .then(function (j) { if (j && j.url) { location.href = j.url; } else toast(String((j && j.error) || t("pay.fail"))); })
+      .then(function (j) {
+        if (!j || j.error) { toast(String((j && j.error) || t("pay.fail"))); return; }
+        // Paddle's checkout.url opens the overlay on this page and needs Paddle.js; only Stripe redirects.
+        var ctk = (payCache && payCache.paddle_token) || "";
+        if (isPaddle && j.id && ctk) { paddleCheckout(ctk, j); return; }
+        if (j.url) { location.href = j.url; }
+        else toast(t("pay.fail"));
+      })
       .catch(function () { toast(t("err.backend")); showUnlock(); });
+  }
+  /* Paddle.js is only fetched when someone actually pays with Paddle. */
+  var paddleLoaded = false, paddleInited = false, paddleQueue = [];
+  function paddleRun(token, txnId) {
+    if (!window.Paddle || !window.Paddle.Checkout || !txnId) return false;
+    if (!paddleInited) { window.Paddle.Initialize({ token: token }); paddleInited = true; }
+    window.Paddle.Checkout.open({ transactionId: txnId });
+    return true;
+  }
+  function paddleCheckout(token, info) {
+    if (paddleRun(token, info.id)) return;
+    paddleQueue.push({ token: token, id: info.id, url: info.url });
+    if (paddleLoaded) return;
+    paddleLoaded = true;
+    var sc = document.createElement("script");
+    sc.src = "https://cdn.paddle.com/2.0/paddle.js";
+    sc.async = true; sc.defer = true;
+    sc.onload = function () {
+      var q = paddleQueue; paddleQueue = [];
+      q.forEach(function (it) { if (!paddleRun(it.token, it.id) && it.url) location.href = it.url; });
+    };
+    sc.onerror = function () {
+      var q = paddleQueue; paddleQueue = [];
+      q.forEach(function (it) { if (it.url) location.href = it.url; });
+    };
+    document.head.appendChild(sc);
   }
   function verifyPayment(payload) {
     if (!apiRoot() || !prefs.token || !payload) return;
