@@ -253,6 +253,7 @@ function paddleProbe(token) {
   const { context, nodes } = load({
     prefs: signedIn,
     payMethods: { providers: { stripe: false, paddle: true }, paddle_token: token },
+    checkout: PADDLE_OK,
   });
   context.window.Paddle = {
     Environment: { set(v) { envs.push(v); } },
@@ -263,17 +264,21 @@ function paddleProbe(token) {
   return { context, nodes, envs, opened };
 }
 
-test('a test_ client-side token selects the Paddle sandbox environment', async () => {
-  const { context, envs, opened } = paddleProbe('test_ctk_env1');
-  context.window.testDoCheckout('paddle');
+async function probePaddle(token) {
+  const probe = paddleProbe(token);
+  await tick();                 // payCache is filled by the dialog's /api/pay-methods call
+  probe.context.window.testDoCheckout('paddle');
   await tick();
+  return probe;
+}
+
+test('a test_ client-side token selects the Paddle sandbox environment', async () => {
+  const { envs, opened } = await probePaddle('test_ctk_env1');
   assert.deepEqual(envs, ['sandbox'], 'Paddle.js must be pointed at sandbox before opening');
   assert.deepEqual(opened, ['txn_new']);
 });
 
 test('a live_ client-side token selects the production environment', async () => {
-  const { context, envs } = paddleProbe('live_ctk_env2');
-  context.window.testDoCheckout('paddle');
-  await tick();
+  const { envs } = await probePaddle('live_ctk_env2');
   assert.deepEqual(envs, ['production']);
 });
