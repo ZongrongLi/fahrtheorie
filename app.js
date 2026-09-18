@@ -44,6 +44,9 @@
     mediaBase: "https://cdn.jsdelivr.net/gh/ZongrongLi/fahrtheorie-media@master/"
   };
 
+  /* Official catalogue this build ships with — the rail footer label is localised from it. */
+  var CATALOGUE_DATE = "2025-04-01";
+
   /* ---------------- state ---------------- */
   var CAT = null, CAT_ALL = null, BY = {}, INDEX = null;
   function isClassB(q) {
@@ -337,6 +340,7 @@
                 : '<button class="btn primary small" data-act="register-open">' + esc(t("ai.freeTen")) + '</button><button class="btn ghost small" data-act="unlock-open">' + esc(t("support.pro")) + '</button>')) +
         '</div>' +
         '<p class="fineprint">' + esc(t("ai.freeAllNote")) + '</p>' +
+        '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
         '<p class="fineprint">fahrtheorie.homes</p>' +
       '</div></section>';
   }
@@ -1045,8 +1049,8 @@
         '<label class="btn ghost small">' + ic("up") + esc(t("settings.import")) + '<input type="file" accept="application/json" data-role="import" hidden></label>' +
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
-        '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a></p>' +
-        '<p class="fineprint">build v57 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
+        '<p class="fineprint">build v58 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1280,6 +1284,8 @@
         '<span class="muted" data-role="pay-loading">' + esc(t("pay.checking")) + '</span>' +
       '</div>' +
       '<p class="fineprint" data-role="pay-note"></p>' +
+      '<p class="fineprint">' + esc(t("ai.refundNote")) +
+        ' <a href="refunds.html" target="_blank" rel="noopener">' + esc(t("legal.refunds")) + '</a></p>' +
       '<div class="q-actions center" style="margin-top:14px"><button class="btn ghost small" data-act="close-modal">' + esc(t("common.close")) + '</button></div>' +
     '</div>';
     document.body.appendChild(m);
@@ -1549,6 +1555,17 @@
     if (!document.querySelectorAll) return;
     document.querySelectorAll("[data-i18n]").forEach(function (el) { el.textContent = t(el.getAttribute("data-i18n")); });
     document.querySelectorAll("[data-i18n-title]").forEach(function (el) { el.setAttribute("title", t(el.getAttribute("data-i18n-title"))); });
+    try { document.title = t("app.name") + " · fahrtheorie.homes"; } catch (e) {}
+    localizeRailFoot();
+  }
+  /* Rail footer numbers live in static HTML, so they are re-labelled once the bank is ready. */
+  function localizeRailFoot() {
+    var v = document.querySelector('[data-role="rail-version"]');
+    var c = document.querySelector('[data-role="rail-counts"]');
+    if (!v || !c) return;
+    if (!CAT_ALL || !CAT_ALL.length) return;
+    v.textContent = t("rail.bankVersion", { d: CATALOGUE_DATE });
+    c.textContent = t("rail.counts", { b: CAT_ALL.filter(isClassB).length, a: CAT_ALL.length });
   }
   function contentOptions() {
     return [["zhen", t("lang.zhen")], ["zh", t("lang.zh")], ["en", t("lang.en")], ["de", t("lang.de")]];

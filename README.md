@@ -2,7 +2,7 @@
 
 德国驾照理论考试刷题应用：分类刷题、错题本、笔记、AI 讲解、图片题与视频题，
 **10 种界面语言**（下拉框切换，含阿拉伯语 RTL）+ 题目中/英/德显示切换，**AI 讲解语言跟随题目语言**。
-学习进度存浏览器本地；账号、AI 额度、支付走 Cloudflare Worker 后端。线上：https://fahrtheorie.homes（当前 build v57）。
+学习进度存浏览器本地；账号、AI 额度、支付走 Cloudflare Worker 后端。线上：https://fahrtheorie.homes（当前 build v58）。
 
 - 题库：官方目录（2025-04-01 版，2026 年 9 月仍为最新），默认只显示 **B 照 1264 题**，可切换「全部车型 2413 题」
 - 单页应用，**无构建步骤**；前端纯静态（GitHub Pages），账号/AI/支付由 Cloudflare Worker + KV 提供（见 `../../dtt-backend/`）；学习进度仍只存用户浏览器
@@ -123,13 +123,18 @@ if (!licence || !(await env.KV.get("lic:" + licence))) {
 index.html            入口（外壳：顶栏 / 侧栏 / 移动底栏 / 视图容器）
 styles.css            全部样式（设计令牌、明暗主题、响应式、弹窗）
 app.js                应用逻辑（路由、刷题、错题本、笔记、模拟考试、设置、缓存、支持/解锁）
-i18n.js               界面文案（中文 / English）
+i18n.js               界面文案（10 个语言包：zh/en/de/ru/tr/uk/pl/ro/vi/ar，键名一一对齐）
 ai.js                 AI 双引擎（离线讲解 + 可选大模型）
+privacy.html          隐私政策（中/英）
+terms.html            服务条款（中/英，含退款摘要）
+refunds.html          退款与撤回政策（中/英/德三语，Paddle 审核要的独立页）
+favicon.svg|png|ico   站点图标；apple-touch-icon.png 给 iOS
 data/questions.js     题库数据
 data/zh.js            中文译文 + 中文主语
 data/videos.js        视频题路径索引
 assets/img/*.webp     769 张官方配图
 assets/fonts/*.woff2  自托管字体
+tests/*.test.cjs      前端自测（startup / ai-lang / legal）
 dtt_serve.py（可选）  本地增强服务：静态托管 + /v1 AI 代理 + /media 视频代理
 ```
 
@@ -137,7 +142,7 @@ dtt_serve.py（可选）  本地增强服务：静态托管 + /v1 AI 代理 + /m
 
 | 想改什么 | 改哪里 |
 |---|---|
-| 界面文案 / 翻译 | `i18n.js`（`zh` / `en` 两套，键名一致） |
+| 界面文案 / 翻译 | `i18n.js`（10 个语言包，键名必须逐个对齐；改完跑下面的自检命令） |
 | 配色 / 圆角 / 间距 | `styles.css` 顶部 `:root` 与 `html[data-theme="dark"]` |
 | 默认题库范围 / 语言 | `app.js` 里 `prefs` 的初始值（`scope` / `uiLang` / `contentLang`） |
 | 题库内容 | 替换 `data/questions.js`（字段：`id/qd/qe/od/oe/ans/t/num/cd/ce/img/s/sd/th/ch/pt`） |
@@ -145,6 +150,27 @@ dtt_serve.py（可选）  本地增强服务：静态托管 + /v1 AI 代理 + /m
 | 视频路径 | `data/videos.js`（键=题号，值=相对 `/media/` 的路径） |
 | AI 默认接口 | `ai.js` 的 `AI_DEFAULT` |
 | 打赏/解锁入口 | 设置 → 支持与解锁（存于浏览器偏好，可写入 `app.js` 默认值） |
+
+## 发布前自检
+
+版本号是手工三件套，漏一处就会出现缓存与界面不一致：
+
+1. `index.html` 里 7 处 `?v=NN`（stylesheet + 6 个 script）
+2. `index.html` 侧栏 `rail-foot` 的 `build vNN`
+3. `app.js` 设置页「关于」里的 `build vNN`
+
+```bash
+node --check app.js ai.js i18n.js
+node tests/startup.test.cjs && node tests/ai-lang.test.cjs && node tests/legal.test.cjs
+
+# 10 个语言包键数一致、无缺漏、无空值（legal.test.cjs 也覆盖这条）
+node -e "global.window={};require('./i18n.js');var I=window.I18N,b=Object.keys(I.zh);Object.keys(I).forEach(function(l){var k=Object.keys(I[l]);console.log(l,k.length,'miss',b.filter(function(x){return !(x in I[l])}).length,'extra',k.filter(function(x){return !(x in I.zh)}).length)})"
+
+git add -A && git commit -m "build vNN: ..." && git push origin main   # push 即上线 GitHub Pages
+```
+
+`tests/legal.test.cjs` 额外盯住：三件套版本号一致、三个法务页（隐私/条款/退款）互相链接、
+解锁弹窗付款前显示撤回权说明、侧栏与首页页脚的法律链接、图标文件存在且被引用。
 
 ## 质量说明
 

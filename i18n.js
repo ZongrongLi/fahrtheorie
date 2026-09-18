@@ -270,7 +270,7 @@ window.I18N = {
     "settings.about": "关于",
     "settings.aboutText": "本应用为学习工具，题目与答案来自官方理论考试题库（DE 原文 + EN 译文）。请以官方最新题库与驾校教材为准。",
     "legal.privacy": "隐私政策",
-    "legal.terms": "服务条款与退款",
+    "legal.terms": "服务条款",
 
     "lang.zhen": "中英双语",
     "lang.zh": "中文",
@@ -333,7 +333,11 @@ window.I18N = {
     "err.backend": "连不上后端",
     "err.backendLocal": "连不上后端，已切回本地模式",
     "settings.langNote": "界面语言与题目语言可以分别设置：界面语言决定按钮和文字，题目语言决定题干与答案的显示语言。",
-    "common.saved": "已保存"
+    "common.saved": "已保存",
+    "legal.refunds": "退款与撤回",
+    "ai.refundNote": "未使用的解锁 14 天内可全额退款；开始生成讲解即同意提前交付并失去撤回权。",
+    "rail.bankVersion": "题库版本 {d}",
+    "rail.counts": "B 照 {b} 题 · 全部 {a} 题",
   },
   en: {
     "app.name": "German Theory Trainer",
@@ -624,7 +628,7 @@ window.I18N = {
     "settings.about": "About",
     "settings.aboutText": "This is a study tool. Questions and answers come from the official theory-exam catalogue (German original + English translation). Always defer to the current official catalogue and your driving school.",
     "legal.privacy": "Privacy policy",
-    "legal.terms": "Terms & refunds",
+    "legal.terms": "Terms of use",
 
     "lang.zhen": "中文 + English",
     "lang.zh": "中文",
@@ -687,7 +691,11 @@ window.I18N = {
     "err.backend": "Backend unreachable",
     "err.backendLocal": "Backend unreachable — local mode",
     "settings.langNote": "Interface language and question language are independent: the interface language sets buttons and labels, the question language sets the question text and answers.",
-    "common.saved": "Saved"
+    "common.saved": "Saved",
+    "legal.refunds": "Refunds & withdrawal",
+    "ai.refundNote": "Unused unlocks are fully refundable within 14 days; generating your first explanation means you agree to immediate delivery and lose the withdrawal right.",
+    "rail.bankVersion": "Catalogue {d}",
+    "rail.counts": "Class B {b} · all {a}",
   },
 
   de: {   /* Deutsch */
@@ -951,7 +959,7 @@ window.I18N = {
     "settings.about": "Über",
     "settings.aboutText": "Dies ist ein Lernwerkzeug. Fragen und Antworten stammen aus dem offiziellen Katalog der Theorieprüfung (deutsches Original + englische Übersetzung). Maßgeblich sind immer der aktuelle offizielle Katalog und deine Fahrschule.",
     "legal.privacy": "Datenschutzerklärung",
-    "legal.terms": "Bedingungen & Erstattungen",
+    "legal.terms": "Nutzungsbedingungen",
     "lang.zhen": "中文 + English",
     "lang.zh": "中文",
     "lang.en": "English",
@@ -1011,7 +1019,11 @@ window.I18N = {
     "err.backend": "Backend nicht erreichbar",
     "err.backendLocal": "Backend nicht erreichbar – lokaler Modus",
     "settings.langNote": "Oberflächen- und Fragensprache sind unabhängig voneinander: Die Oberflächensprache bestimmt Schaltflächen und Beschriftungen, die Fragensprache Fragetexte und Antworten.",
-    "common.saved": "Gespeichert"
+    "common.saved": "Gespeichert",
+    "legal.refunds": "Widerruf & Erstattung",
+    "ai.refundNote": "Ungenutzte Freischaltungen sind innerhalb von 14 Tagen voll erstattungsfähig. Mit der ersten KI-Erklärung stimmen Sie der sofortigen Bereitstellung zu und verlieren das Widerrufsrecht.",
+    "rail.bankVersion": "Katalog {d}",
+    "rail.counts": "Klasse B {b} · gesamt {a}",
   },
 
   ru: {   /* Русский */
@@ -1275,7 +1287,7 @@ window.I18N = {
     "settings.about": "О приложении",
     "settings.aboutText": "Это учебный инструмент. Вопросы и ответы взяты из официального каталога экзаменационных вопросов (оригинал на немецком + перевод на английский). Всегда ориентируйтесь на действующий официальный каталог и рекомендации автошколы.",
     "legal.privacy": "Политика конфиденциальности",
-    "legal.terms": "Условия и возвраты",
+    "legal.terms": "Условия использования",
     "lang.zhen": "中文 + English",
     "lang.zh": "中文",
     "lang.en": "English",
@@ -1335,7 +1347,11 @@ window.I18N = {
     "err.backend": "Сервер недоступен",
     "err.backendLocal": "Сервер недоступен — локальный режим",
     "settings.langNote": "Язык интерфейса и язык вопросов не зависят друг от друга: язык интерфейса определяет кнопки и надписи, а язык вопросов — текст вопросов и ответов.",
-    "common.saved": "Сохранено"
+    "common.saved": "Сохранено",
+    "legal.refunds": "Возврат и отказ от договора",
+    "ai.refundNote": "Неиспользованную разблокировку можно полностью вернуть в течение 14 дней; создав первое объяснение, вы соглашаетесь с немедленной поставкой и теряете право на отказ.",
+    "rail.bankVersion": "Каталог {d}",
+    "rail.counts": "Категория B: {b} · всего {a}",
   },
 
   tr: {   /* Türkçe */
@@ -1599,7 +1615,7 @@ window.I18N = {
     "settings.about": "Hakkında",
     "settings.aboutText": "Bu bir çalışma aracıdır. Sorular ve cevaplar resmi teori sınavı kataloğundan gelir (Almanca aslı + İngilizce çeviri). Her zaman güncel resmi kataloğu ve sürücü kursunuzu esas alın.",
     "legal.privacy": "Gizlilik politikası",
-    "legal.terms": "Şartlar ve iadeler",
+    "legal.terms": "Kullanım koşulları",
     "lang.zhen": "中文 + English",
     "lang.zh": "中文",
     "lang.en": "English",
@@ -1659,7 +1675,11 @@ window.I18N = {
     "err.backend": "Sunucuya ulaşılamıyor",
     "err.backendLocal": "Sunucuya ulaşılamıyor — yerel mod",
     "settings.langNote": "Arayüz dili ve soru dili birbirinden bağımsızdır: Arayüz dili buton ve etiketleri, soru dili ise soru metinlerini ve yanıtları belirler.",
-    "common.saved": "Kaydedildi"
+    "common.saved": "Kaydedildi",
+    "legal.refunds": "İade ve cayma",
+    "ai.refundNote": "Kullanılmamış açma, 14 gün içinde tam iade edilebilir; ilk açıklamayı oluşturduğunuzda anında teslimatı kabul etmiş ve cayma hakkını yitirmiş olursunuz.",
+    "rail.bankVersion": "Katalog {d}",
+    "rail.counts": "B sınıfı {b} · tümü {a}",
   },
 
   uk: {   /* Українська */
@@ -1923,7 +1943,7 @@ window.I18N = {
     "settings.about": "Про застосунок",
     "settings.aboutText": "Це навчальний інструмент. Запитання та відповіді взято з офіційного каталогу теоретичного іспиту (німецький оригінал + англійський переклад). Завжди керуйтеся чинним офіційним каталогом і вказівками автошколи.",
     "legal.privacy": "Політика конфіденційності",
-    "legal.terms": "Умови та повернення коштів",
+    "legal.terms": "Умови використання",
     "lang.zhen": "中文 + English",
     "lang.zh": "中文",
     "lang.en": "English",
@@ -1983,7 +2003,11 @@ window.I18N = {
     "err.backend": "Сервер недоступний",
     "err.backendLocal": "Сервер недоступний — локальний режим",
     "settings.langNote": "Мова інтерфейсу та мова запитань не залежать одна від одної: мова інтерфейсу визначає кнопки й підписи, а мова запитань — текст запитань і відповідей.",
-    "common.saved": "Збережено"
+    "common.saved": "Збережено",
+    "legal.refunds": "Повернення та відмова від договору",
+    "ai.refundNote": "Невикористане розблокування можна повністю повернути протягом 14 днів; створивши перше пояснення, ви погоджуєтесь із негайною поставкою і втрачаєте право на відмову.",
+    "rail.bankVersion": "Каталог {d}",
+    "rail.counts": "Категорія B: {b} · усього {a}",
   },
 
   pl: {   /* Polski */
@@ -2247,7 +2271,7 @@ window.I18N = {
     "settings.about": "Informacje",
     "settings.aboutText": "To narzędzie do nauki. Pytania i odpowiedzi pochodzą z oficjalnego katalogu pytań egzaminu teoretycznego (niemiecki oryginał + tłumaczenie angielskie). Zawsze kieruj się aktualnym oficjalnym katalogiem i zaleceniami szkoły jazdy.",
     "legal.privacy": "Polityka prywatności",
-    "legal.terms": "Warunki i zwroty",
+    "legal.terms": "Warunki użytkowania",
     "lang.zhen": "中文 + English",
     "lang.zh": "中文",
     "lang.en": "English",
@@ -2307,7 +2331,11 @@ window.I18N = {
     "err.backend": "Backend niedostępny",
     "err.backendLocal": "Backend niedostępny — tryb lokalny",
     "settings.langNote": "Język interfejsu i język pytań są niezależne: język interfejsu dotyczy przycisków i etykiet, a język pytań – treści pytań i odpowiedzi.",
-    "common.saved": "Zapisano"
+    "common.saved": "Zapisano",
+    "legal.refunds": "Zwroty i odstąpienie od umowy",
+    "ai.refundNote": "Niewykorzystane odblokowanie podlega pełnemu zwrotowi w ciągu 14 dni; wygenerowanie pierwszego wyjaśnienia oznacza zgodę na natychmiastową dostawę i utratę prawa do odstąpienia od umowy.",
+    "rail.bankVersion": "Katalog {d}",
+    "rail.counts": "Klasa B: {b} · wszystkie {a}",
   },
 
   ro: {   /* Română */
@@ -2571,7 +2599,7 @@ window.I18N = {
     "settings.about": "Despre",
     "settings.aboutText": "Acesta este un instrument de studiu. Întrebările și răspunsurile provin din catalogul oficial al examenului teoretic (original în germană + traducere în engleză). Respectă întotdeauna catalogul oficial actual și indicațiile școlii de șoferi.",
     "legal.privacy": "Politica de confidențialitate",
-    "legal.terms": "Termeni și rambursări",
+    "legal.terms": "Condiții de utilizare",
     "lang.zhen": "中文 + English",
     "lang.zh": "中文",
     "lang.en": "English",
@@ -2631,7 +2659,11 @@ window.I18N = {
     "err.backend": "Backend inaccesibil",
     "err.backendLocal": "Backend inaccesibil — mod local",
     "settings.langNote": "Limba interfeței și limba întrebărilor sunt independente: limba interfeței setează butoanele și etichetele, iar limba întrebărilor setează textul întrebărilor și răspunsurile.",
-    "common.saved": "Salvat"
+    "common.saved": "Salvat",
+    "legal.refunds": "Rambursări și retragere",
+    "ai.refundNote": "Deblocarea neutilizată poate fi rambursată integral în 14 zile; prin generarea primei explicații accepți livrarea imediată și pierzi dreptul de retragere.",
+    "rail.bankVersion": "Catalog {d}",
+    "rail.counts": "Clasa B: {b} · total {a}",
   },
 
   vi: {   /* Tiếng Việt */
@@ -2895,7 +2927,7 @@ window.I18N = {
     "settings.about": "Giới thiệu",
     "settings.aboutText": "Đây là công cụ học tập. Câu hỏi và câu trả lời lấy từ bộ câu hỏi thi lý thuyết chính thức (bản gốc tiếng Đức + bản dịch tiếng Anh). Luôn ưu tiên bộ câu hỏi chính thức hiện hành và hướng dẫn của trường dạy lái xe.",
     "legal.privacy": "Chính sách bảo mật",
-    "legal.terms": "Điều khoản và hoàn tiền",
+    "legal.terms": "Điều khoản sử dụng",
     "lang.zhen": "中文 + Tiếng Anh",
     "lang.zh": "中文",
     "lang.en": "Tiếng Anh",
@@ -2955,7 +2987,11 @@ window.I18N = {
     "err.backend": "Không thể kết nối máy chủ",
     "err.backendLocal": "Không thể kết nối máy chủ — chế độ cục bộ",
     "settings.langNote": "Ngôn ngữ giao diện và ngôn ngữ câu hỏi hoạt động độc lập: ngôn ngữ giao diện áp dụng cho các nút và nhãn, ngôn ngữ câu hỏi áp dụng cho nội dung câu hỏi và đáp án.",
-    "common.saved": "Đã lưu"
+    "common.saved": "Đã lưu",
+    "legal.refunds": "Hoàn tiền và rút hợp đồng",
+    "ai.refundNote": "Gói mở khóa chưa sử dụng được hoàn 100% trong 14 ngày; khi tạo bài giải thích đầu tiên, bạn đồng ý nhận nội dung ngay và mất quyền rút lại hợp đồng.",
+    "rail.bankVersion": "Ngân hàng câu hỏi {d}",
+    "rail.counts": "Hạng B {b} · tất cả {a}",
   },
 
   ar: {   /* العربية */
@@ -3219,7 +3255,7 @@ window.I18N = {
     "settings.about": "حول",
     "settings.aboutText": "هذه أداة للدراسة. تأتي الأسئلة والإجابات من الكتالوج الرسمي لامتحان النظريات (الأصل الألماني + الترجمة الإنجليزية). اعتمد دائمًا على الكتالوج الرسمي الحالي ومدرسة القيادة التابعة لك.",
     "legal.privacy": "سياسة الخصوصية",
-    "legal.terms": "الشروط وعمليات استرداد المبالغ",
+    "legal.terms": "شروط الاستخدام",
     "lang.zhen": "中文 + English",
     "lang.zh": "中文",
     "lang.en": "English",
@@ -3279,6 +3315,10 @@ window.I18N = {
     "err.backend": "تعذر الاتصال بالخادم",
     "err.backendLocal": "تعذر الاتصال بالخادم — الوضع المحلي",
     "settings.langNote": "لغة الواجهة ولغة الأسئلة مستقلتان: تحدد لغة الواجهة الأزرار والتسميات، بينما تحدد لغة الأسئلة نصوص الأسئلة والإجابات.",
-    "common.saved": "تم الحفظ"
+    "common.saved": "تم الحفظ",
+    "legal.refunds": "الاسترداد وإلغاء العقد",
+    "ai.refundNote": "يمكنك استرداد المبلغ كاملاً خلال 14 يومًا إذا لم تستخدم عملية الفتح؛ بمجرد إنشاء أول شرح فأنت توافق على التسليم الفوري وتفقد حق الإلغاء.",
+    "rail.bankVersion": "كتالوج {d}",
+    "rail.counts": "الفئة ب {b} · الإجمالي {a}",
   },
 };
