@@ -27,6 +27,7 @@ function load({ prefs = {}, payMethods } = {}) {
     window: {},
     console,
     document: {
+      documentElement: { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k]; } },
       readyState: 'loading',
       addEventListener() {},
       createElement: () => stubNode(),

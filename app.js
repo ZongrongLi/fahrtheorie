@@ -136,17 +136,37 @@
 
   /* ---------------- i18n ---------------- */
   function t(k, v) {
-    var s = (window.I18N[prefs.uiLang] || window.I18N.zh)[k] || (window.I18N.en[k] || k);
+    var pack = window.I18N[prefs.uiLang] || {}, en = window.I18N.en || {}, zh = window.I18N.zh || {};
+    var s = pack[k] || en[k] || zh[k] || k;
     if (v) for (var p in v) s = s.replace(new RegExp("\\{" + p + "\\}", "g"), v[p]);
     return s;
   }
   var isZh = function () { return prefs.uiLang === "zh"; };
+  /* Interface languages — native names, so the picker reads the same for everyone.
+     Adding one = one entry here + one pack in i18n.js. */
+  var UI_LANGS = [
+    ["zh", "简体中文"], ["en", "English"], ["de", "Deutsch"], ["ru", "Русский"],
+    ["tr", "Türkçe"], ["uk", "Українська"], ["pl", "Polski"], ["ro", "Română"],
+    ["vi", "Tiếng Việt"], ["ar", "العربية"]
+  ];
+  var RTL_LANGS = { ar: 1, fa: 1, he: 1, ur: 1 };
+  function langKnown(code) { for (var i = 0; i < UI_LANGS.length; i++) if (UI_LANGS[i][0] === code) return true; return false; }
+  if (!langKnown(prefs.uiLang)) prefs.uiLang = "zh";
   function contentLangs() {
     var c = prefs.contentLang;
     if (c === "zhen") return ["zh", "en"];
     if (c === "zh") return ["zh"];
     if (c === "de") return ["de"];
     return ["en"];
+  }
+  /* The AI answers in the language the question is displayed in. The bilingual
+     view (中文 + English) follows the chosen explanation language. */
+  function aiLang() {
+    var l = contentLangs();
+    if (l.length < 2) return l[0] || "en";
+    if (l.indexOf(prefs.explLang) >= 0) return prefs.explLang;
+    if (l.indexOf(prefs.uiLang) >= 0) return prefs.uiLang;
+    return l[0];
   }
   function zhWanted() { return contentLangs().indexOf("zh") >= 0; }
   function zhOf(q) { return (window.__ZH && window.__ZH[q.id]) || null; }
@@ -398,7 +418,7 @@
         '</div>' +
       '</section>' +
       qlistSection(arr, th, ch) +
-      (ch ? "" : '<section class="block"><header class="block-h"><h2>' + esc(isZh() ? "章节" : "Chapters") + '</h2></header><div class="chap-list">' +
+      (ch ? "" : '<section class="block"><header class="block-h"><h2>' + esc(t("cat.chapters")) + '</h2></header><div class="chap-list">' +
         T.order.map(function (c) {
           var C = T.chapters[c]; var a = qsIn(th, c);
           var w = a.filter(function (q) { return state.q[q.id] && state.q[q.id].wrong; }).length;
@@ -732,7 +752,7 @@
       : '<div class="q-actions">' + prevBtn + '<button class="btn primary" data-act="submit">' + esc(t("quiz.submit")) + '</button>' +
         '<button class="btn ghost" data-act="reveal">' + esc(t("quiz.reveal")) + '</button>' +
         '<button class="btn ghost" data-act="next">' + esc(session.i + 1 >= session.ids.length ? t("quiz.finish") : t("quiz.next")) + ic("right") + '</button>' +
-        '<span class="kbd-hint"><kbd>←/→</kbd> ' + esc(isZh() ? "上一题/下一题" : "prev/next") + ' · <kbd>1-4</kbd> ' + esc(isZh() ? "选项" : "options") + ' · <kbd>↵</kbd> ' + esc(isZh() ? "提交" : "submit") + '</span></div>';
+        '<span class="kbd-hint"><kbd>←/→</kbd> ' + esc(t("quiz.kbdNav")) + ' · <kbd>1-4</kbd> ' + esc(t("quiz.kbdOpts")) + ' · <kbd>↵</kbd> ' + esc(t("quiz.kbdSubmit")) + '</span></div>';
 
     var fb = a.submitted ? feedbackBlock(q, a) : "";
 
@@ -794,6 +814,7 @@
     if (aiHist[q.id]) return aiHist[q.id];
     var hist = [];
     var c = state.ai[q.id];
+    if (c && c.text && c.lang && c.lang !== aiLang()) c = null;   // cached in another language -> regenerate
     if (c && c.text) {
       hist.push({ role: "assistant", text: c.text });
       (c.qa || []).forEach(function (p) { hist.push({ role: "user", text: p.q }); hist.push({ role: "assistant", text: p.a }); });
@@ -801,26 +822,23 @@
     aiHist[q.id] = hist;
     return hist;
   }
-  function aiHas(q) { return !!(state.ai[q.id] && state.ai[q.id].text); }
+  function aiHas(q) { var c = state.ai[q.id]; return !!(c && c.text && (!c.lang || c.lang === aiLang())); }
   function aiGenerate(q) {
     if (!q) return;
     var hist = aiHist[q.id] || (aiHist[q.id] = []);
     if (hist.length) return;
-    var offline = window.AI.answerLocal(q, "", prefs.uiLang, prefs.contentLang, true);
-    hist.push({ role: "assistant", text: (isZh() ? "正在生成讲解…" : "Generating…") });
+    var offline = window.AI.answerLocal(q, "", aiLang(), true);
+    hist.push({ role: "assistant", text: t("ai.generating") });
     if (session) rerenderQuiz();
     var done = function (txt) {
       var out = txt || offline;
       var c = state.ai[q.id] || (state.ai[q.id] = {});
-      c.text = out; c.at = Date.now(); c.lang = prefs.explLang; saveState();
+      c.text = out; c.at = Date.now(); c.lang = aiLang(); c.qa = []; saveState();
       aiHist[q.id] = [{ role: "assistant", text: out }];
       if (session) rerenderQuiz();
     };
     if (window.AI.hasLLM()) {
-      var ask = isZh()
-        ? "请用简体中文讲解这道题：为什么正确选项是对的、其他选项错在哪里，最后给一条记忆要点。"
-        : "Explain this question in English: why the correct options are right, where the others are wrong, and a memory tip at the end.";
-      window.AI.chat(q, [], ask, prefs.uiLang, prefs.contentLang).then(function (r) { done(r); }, function () { done(offline); });
+      window.AI.chat(q, [], window.AI.askText(aiLang()), aiLang()).then(function (r) { done(r); }, function () { done(offline); });
     } else {
       setTimeout(function () { done(offline); }, 200);
     }
@@ -920,7 +938,7 @@
   function vExamHome() {
     return '<section class="page-h"><span class="eyebrow">' + ic("clock") + esc(t("exam.title")) + '</span><h1>' + esc(t("exam.title")) + '</h1><p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
       '<div class="hero-cta"><button class="btn primary" data-act="exam-start">' + ic("clock") + esc(t("exam.start")) + '</button></div>' +
-      '<div class="note-card"><h4>' + esc(isZh() ? "评分规则" : "Grading") + '</h4><p>' + esc(t("exam.passLine", { p: "≤ 10" })) + '</p></div></section>';
+      '<div class="note-card"><h4>' + esc(t("exam.grading")) + '</h4><p>' + esc(t("exam.passLine", { p: "≤ 10" })) + '</p></div></section>';
   }
   function vExam() {
     var now = Date.now(); var left = Math.max(0, session.durationMs - (now - session.startedAt));
@@ -1014,8 +1032,9 @@
     var img = CAT.filter(function (q) { return q.img; }).length;
     return '<section class="page-h"><span class="eyebrow">' + ic("cog") + esc(t("settings.title")) + '</span><h1>' + esc(t("settings.title")) + '</h1></section>' +
       card(t("settings.appearance"),
-        seg(t("settings.uiLang"), "uilang", [["zh", t("lang.zh")], ["en", t("lang.en")]], prefs.uiLang) +
-        seg(t("settings.contentLang"), "contentlang", [["zhen", t("lang.zhen")], ["zh", t("lang.zh")], ["en", t("lang.en")], ["de", t("lang.de")]], prefs.contentLang) +
+        langField(t("settings.uiLang"), "ui", uiOptions(), prefs.uiLang) +
+        langField(t("settings.contentLang"), "content", contentOptions(), prefs.contentLang) +
+        '<p class="fineprint">' + esc(t("settings.langNote")) + '</p>' +
         seg(t("quiz.explLang"), "expllang", [["zh", t("lang.zh")], ["en", t("lang.en")], ["de", t("lang.de")]], prefs.explLang) +
         seg(t("settings.theme"), "theme", [["light", t("settings.themeLight")], ["dark", t("settings.themeDark")]], prefs.theme) +
         seg(t("settings.scope"), "scope", [["b", t("scope.b") + " (" + (CAT_ALL ? CAT_ALL.filter(isClassB).length : 0) + ")"], ["all", t("scope.all") + " (" + (CAT_ALL ? CAT_ALL.length : 0) + ")"]], prefs.scope) +
@@ -1027,7 +1046,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a></p>' +
-        '<p class="fineprint">build v56 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v57 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1111,7 +1130,7 @@
     prefs.user = name;
     if (j) { prefs.token = j.token || ""; prefs.serverLeft = (typeof j.left === "number") ? j.left : 10; applyServerAI(); }
     else if (typeof prefs.freeLeft !== "number") prefs.freeLeft = 10;
-    savePrefs(); syncUser(); closeModal();
+    savePrefs(); syncUser(); closeModal(); applyTheme(); renderTopbar();
     toast(t("login.ok", { n: quotaLeft() }));
     if (window.__pendingPay) { window.__pendingPay = false; showUnlock(); return true; }
     if (session) rerenderQuiz(); else route();
@@ -1123,8 +1142,8 @@
     if (apiRoot()) {
       return fetch(apiRoot() + "/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name }) })
         .then(function (r) { return r.json(); })
-        .then(function (j) { if (!j || j.error) { toast(String((j && j.error) || "登录失败")); return false; } return finishLogin(j.user || name, j); })
-        .catch(function () { toast(isZh() ? "连不上后端，已切回本地模式" : "Backend unreachable — local mode"); return finishLogin(name, null); });
+        .then(function (j) { if (!j || j.error) { toast(String((j && j.error) || t("auth.failLogin"))); return false; } return finishLogin(j.user || name, j); })
+        .catch(function () { toast(t("err.backendLocal")); return finishLogin(name, null); });
     }
     return finishLogin(name, null);
   }
@@ -1165,7 +1184,7 @@
             if (!resp || !resp.credential) return;
             authPost("/api/google", { credential: resp.credential })
               .then(function (j) { if (!j || j.error) toast(String((j && j.error) || t("auth.googleFail"))); else finishLogin(j.user, j); })
-              .catch(function () { toast(isZh() ? "连不上后端" : "Backend unreachable"); });
+              .catch(function () { toast(t("err.backend")); });
           }
         });
         google.accounts.id.renderButton(box, { theme: "outline", size: "large", text: "continue_with", width: 250 });
@@ -1203,7 +1222,7 @@
     })
       .then(function (r) { return r.json(); })
       .then(function (j) { if (j && j.url) { location.href = j.url; } else toast(String((j && j.error) || t("pay.fail"))); })
-      .catch(function () { toast(isZh() ? "连不上后端" : "Backend unreachable"); showUnlock(); });
+      .catch(function () { toast(t("err.backend")); showUnlock(); });
   }
   function verifyPayment(payload) {
     if (!apiRoot() || !prefs.token || !payload) return;
@@ -1231,7 +1250,7 @@
   function unlockApply(key) {
     if (!key) { toast(t("support.licNeed")); return false; }
     if (apiRoot() && prefs.token) {
-      return fetch(apiRoot() + "/api/unlock", { method: "POST", headers: { "Content-Type": "application/json", Authorization: "***" + prefs.token }, body: JSON.stringify({ code: key }) })
+      return fetch(apiRoot() + "/api/unlock", { method: "POST", headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token }, body: JSON.stringify({ code: key }) })
         .then(function (r) { return r.json(); })
         .then(function (j) {
           if (!j || j.error) { toast(String((j && j.error) || "解锁码无效")); return false; }
@@ -1239,7 +1258,7 @@
           refreshQuota(); if (session) rerenderQuiz(); else route();
           return true;
         })
-        .catch(function () { toast(isZh() ? "连不上后端" : "Backend unreachable"); return false; });
+        .catch(function () { toast(t("err.backend")); return false; });
     }
     if (!licBase()) { toast(t("ai.needOwner")); return false; }
     prefs.lic = key; savePrefs();
@@ -1337,18 +1356,18 @@
       var p = document.querySelector('[data-role="pending"]'); if (p) p.remove();
       hist.push({ role: "assistant", text: answer });
       var cc = state.ai[q.id] || (state.ai[q.id] = {});
-      cc.qa = cc.qa || []; cc.qa.push({ q: text, a: answer }); saveState();
+      cc.lang = aiLang(); cc.qa = cc.qa || []; cc.qa.push({ q: text, a: answer }); saveState();
       if (container) { container.insertAdjacentHTML("beforeend", '<div class="msg assistant"><div class="bubble md">' + md(answer) + "</div></div>"); container.scrollTop = container.scrollHeight; }
     }
     if (window.AI.hasLLM()) {
-      window.AI.chat(q, hist.slice(0, -1), text, prefs.uiLang, prefs.contentLang)
+      window.AI.chat(q, hist.slice(0, -1), text, aiLang())
         .then(function (r) { done(r || "(empty)"); })
         .catch(function (e) {
-          var base = window.AI.answerLocal(q, text, prefs.uiLang, prefs.contentLang);
+          var base = window.AI.answerLocal(q, text, aiLang());
           done((e && e.kind === "http" ? t("ai.errHttp", { msg: e.msg }) + "\n\n" : "") + base);
         });
     } else {
-      setTimeout(function () { done(window.AI.answerLocal(q, text, prefs.uiLang, prefs.contentLang)); }, 180);
+      setTimeout(function () { done(window.AI.answerLocal(q, text, aiLang())); }, 180);
     }
   }
   function aiTranslate(q) {
@@ -1371,7 +1390,7 @@
     var segBtn = e.target.closest("[data-seg] .seg-btn");
     if (segBtn) { var name = segBtn.closest("[data-seg]").getAttribute("data-seg"); var key = name === "uilang" ? "uiLang" : name === "contentlang" ? "contentLang" : name === "expllang" ? "explLang" : name === "scope" ? "scope" : "theme"; prefs[key] = segBtn.getAttribute("data-val"); if (key === "explLang") window.__explLang = prefs.explLang; savePrefs(); applyTheme(); if (key === "scope") { applyScope(); route(); } else { document.getElementById("view").innerHTML = vSettings(); } return; }
 
-    var el = e.target.closest("[data-act]"); if (!el) return;
+    var el = e.target.closest("[data-act]:not(select)"); if (!el) return;
     var act = el.getAttribute("data-act");
     if (act === "ui-lang") { prefs.uiLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; refresh(); return; }
     if (act === "content-lang") { prefs.contentLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; refresh(); return; }
@@ -1402,7 +1421,7 @@
       toast(ws.wrong ? t("quiz.addedWrong") : t("quiz.removedWrong"));
       return;
     }
-    if (act === "bm") { var q = currentQ(); var st = qState(q.id); st.bm = !st.bm; saveState(); rerenderQuiz(); toast(st.bm ? (isZh() ? "已收藏" : "Bookmarked") : (isZh() ? "已取消收藏" : "Bookmark removed")); return; }
+    if (act === "bm") { var q = currentQ(); var st = qState(q.id); st.bm = !st.bm; saveState(); rerenderQuiz(); toast(st.bm ? t("quiz.bookmarked") : t("quiz.unbookmarked")); return; }
     if (act === "savenote") { var qq = currentQ(); var ta = document.querySelector('[data-role="noteta"]'); var txt = ta ? ta.value.trim() : ""; state.notes[qq.id] = { text: txt, at: Date.now() }; saveState(); toast(t("common.saved")); var tg = document.querySelector('[data-role="notetag"]'); if (tg) tg.textContent = txt ? t("common.saved") : t("quiz.noNote"); return; }
     if (act === "reveal-ai") { var pnl = document.querySelector('[data-role="aipanel"]'); if (pnl) { pnl.open = true; var inq = pnl.querySelector('[data-role="aiinput"]'); if (inq) inq.focus(); } return; }
     if (act === "quick") { if (!aiGate()) return; return aiAsk(currentQ(), quickText(parseInt(el.getAttribute("data-q"), 10))); }
@@ -1424,8 +1443,8 @@
       var re_ = authVal("a-email"), rp_ = authVal("a-pass");
       if (!re_ || !rp_) { toast(t("auth.needBoth")); return; }
       authPost("/api/register", { email: re_, password: rp_ })
-        .then(function (j) { if (!j || j.error) toast(String((j && j.error) || "注册失败")); else finishLogin(j.user, j); })
-        .catch(function () { toast(isZh() ? "连不上后端" : "Backend unreachable"); });
+        .then(function (j) { if (!j || j.error) toast(String((j && j.error) || t("auth.failRegister"))); else finishLogin(j.user, j); })
+        .catch(function () { toast(t("err.backend")); });
       return;
     }
     if (act === "do-login") {
@@ -1433,13 +1452,13 @@
         var le_ = authVal("a-email"), lp_ = authVal("a-pass");
         if (!le_ || !lp_) { toast(t("auth.needBoth")); return; }
         authPost("/api/login", { email: le_, password: lp_ })
-          .then(function (j) { if (!j || j.error) toast(String((j && j.error) || "登录失败")); else finishLogin(j.user, j); })
-          .catch(function () { toast(isZh() ? "连不上后端" : "Backend unreachable"); });
+          .then(function (j) { if (!j || j.error) toast(String((j && j.error) || t("auth.failLogin"))); else finishLogin(j.user, j); })
+          .catch(function () { toast(t("err.backend")); });
         return;
       }
       doLogin(authVal("a-name")); return;
     }
-    if (act === "logout") { prefs.user = ""; prefs.uid = ""; prefs.lic = ""; prefs.token = ""; prefs.serverLeft = null; savePrefs(); syncUser(); try { localStorage.removeItem("dtt.ai"); } catch (e) {} if (session) rerenderQuiz(); else route(); toast(t("login.bye")); return; }
+    if (act === "logout") { prefs.user = ""; prefs.uid = ""; prefs.lic = ""; prefs.token = ""; prefs.serverLeft = null; savePrefs(); syncUser(); try { localStorage.removeItem("dtt.ai"); } catch (e) {} if (session) rerenderQuiz(); else route(); renderTopbar(); toast(t("login.bye")); return; }
     if (act === "ai-unlock2") { unlockApply(unlockKeyFrom("lk2")); return; }
     if (act === "ai-unlock") { unlockApply(unlockKeyFrom("lkey")); return; }
     if (act === "support") { showSupport(); return; }
@@ -1468,6 +1487,15 @@
     if (e.target.matches('[data-role="aiform"]')) { e.preventDefault(); if (!aiGate()) return; var inp = e.target.querySelector('[data-role="aiinput"]'); var txt = inp.value.trim(); if (!txt) return; inp.value = ""; aiAsk(currentQ(), txt); }
   });
   document.addEventListener("change", function (e) {
+    if (e.target.matches("select[data-lang]")) {
+      var kind = e.target.getAttribute("data-lang");
+      prefs[kind === "ui" ? "uiLang" : "contentLang"] = e.target.value;
+      if (!langKnown(prefs.uiLang)) prefs.uiLang = "zh";
+      savePrefs(); aiHist = {}; applyTheme();
+      toast(kind === "ui" ? langPickerName(prefs.uiLang) : t("lang." + prefs.contentLang));
+      refresh();
+      return;
+    }
     if (e.target.matches('[data-role="sp-qr"]')) {
       var f = e.target.files[0]; if (!f) return;
       downscale(f, function (d) { prefs.donateQR = d; savePrefs(); document.getElementById("view").innerHTML = vSettings(); toast(t("support.qrSet")); });
@@ -1510,18 +1538,41 @@
     var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "dtt-progress.json"; a.click(); URL.revokeObjectURL(a.href);
   }
 
-  function applyTheme() { document.documentElement.setAttribute("data-theme", prefs.theme); }
-  function renderTopbar() {
+  function applyTheme() {
+    var root = document.documentElement;
+    if (!root || !root.setAttribute) return;
+    root.setAttribute("data-theme", prefs.theme);
+    root.setAttribute("lang", prefs.uiLang || "zh");
+    root.setAttribute("dir", RTL_LANGS[prefs.uiLang] ? "rtl" : "ltr");
+  }
+  function localizeStatic() {
+    if (!document.querySelectorAll) return;
     document.querySelectorAll("[data-i18n]").forEach(function (el) { el.textContent = t(el.getAttribute("data-i18n")); });
+    document.querySelectorAll("[data-i18n-title]").forEach(function (el) { el.setAttribute("title", t(el.getAttribute("data-i18n-title"))); });
+  }
+  function contentOptions() {
+    return [["zhen", t("lang.zhen")], ["zh", t("lang.zh")], ["en", t("lang.en")], ["de", t("lang.de")]];
+  }
+  function uiOptions() { return UI_LANGS.map(function (o) { return [o[0], o[1]]; }); }
+  function langPickerName(code) { for (var i = 0; i < UI_LANGS.length; i++) if (UI_LANGS[i][0] === code) return UI_LANGS[i][1]; return code; }
+  /* Language dropdown, used in the top bar and in Settings. */
+  function langPicker(act, label, opts, cur) {
+    return '<label class="langsel"><select data-lang="' + esc(act) + '" aria-label="' + esc(label) + '" title="' + esc(label) + '">' +
+      opts.map(function (o) { return '<option value="' + esc(o[0]) + '"' + (cur === o[0] ? " selected" : "") + '>' + esc(o[1]) + '</option>'; }).join("") +
+      '</select>' + ic("chev", "chev") + '</label>';
+  }
+  function langField(label, act, opts, cur) {
+    return '<div class="field"><span class="field-lbl">' + esc(label) + '</span>' + langPicker(act, label, opts, cur) + '</div>';
+  }
+  function renderTopbar() {
+    localizeStatic();
     var c = document.getElementById("topcontrols"); if (!c) return;
     c.innerHTML =
       (aiLoggedIn()
         ? '<span class="chip">' + esc(prefs.user) + '</span><button class="btn ghost small" data-act="logout">' + esc(t("login.logout")) + '</button>'
         : '<button class="btn ghost small" data-act="login-open">' + esc(t("auth.loginBtn")) + '</button><button class="btn primary small auth-reg" data-act="register-open">' + esc(t("auth.registerBtn")) + '</button>') +
-      '<div class="seg" role="group" aria-label="' + esc(t("settings.contentLang")) + '">' +
-        ["zhen", "zh", "en", "de"].map(function (v) { return '<button class="seg-btn' + (prefs.contentLang === v ? " on" : "") + '" data-act="content-lang" data-val="' + v + '">' + esc(t("lang." + v)) + '</button>'; }).join("") + '</div>' +
-      '<div class="seg" role="group" aria-label="' + esc(t("settings.uiLang")) + '">' +
-        ["zh", "en"].map(function (v) { return '<button class="seg-btn' + (prefs.uiLang === v ? " on" : "") + '" data-act="ui-lang" data-val="' + v + '">' + esc(t("lang." + v)) + '</button>'; }).join("") + '</div>' +
+      langPicker("content", t("settings.contentLang"), contentOptions(), prefs.contentLang) +
+      langPicker("ui", t("settings.uiLang"), uiOptions(), prefs.uiLang) +
       '<button class="iconbtn" data-act="toggle-theme" title="' + esc(t("settings.theme")) + '" aria-label="' + esc(t("settings.theme")) + '">' + ic(prefs.theme === "dark" ? "sun" : "moon") + '</button>';
   }
   function refresh() {
@@ -1559,6 +1610,8 @@
     setTimeout(vidWarm, 12000);
     setTimeout(function(){ reportProgress(true); }, 13000);
   }
+  applyTheme();
+  localizeStatic();
   window.__boot = boot;
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
 })();
