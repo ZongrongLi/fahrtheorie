@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v70 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v71 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1240,7 +1240,7 @@
         if (!j || j.error) { toast(String((j && j.error) || t("pay.fail"))); return; }
         // Paddle's checkout.url opens the overlay on this page and needs Paddle.js; only Stripe redirects.
         var ctk = (payCache && payCache.paddle_token) || "";
-        if (isPaddle && j.id && ctk) { paddleCheckout(ctk, j); return; }
+        if (isPaddle && j.id && ctk) { paddleCheckout(ctk, j, paddleCustomer(currency)); return; }
         if (j.url) { location.href = j.url; }
         else toast(t("pay.fail"));
       })
@@ -1283,7 +1283,7 @@
     }
     if (name.indexOf("checkout.closed") >= 0) watchPaid();
   }
-  function paddleRun(token, txnId) {
+  function paddleRun(token, txnId, customer) {
     if (!window.Paddle || !window.Paddle.Checkout || !txnId) return false;
     if (!paddleInited) {
       // Paddle.js defaults to production; the token prefix says which side to talk to.
@@ -1293,12 +1293,24 @@
       paddleInited = true;
     }
     paddleTxn = txnId;
-    window.Paddle.Checkout.open({ transactionId: txnId });
+    var open = { transactionId: txnId };
+    if (customer) open.customer = customer;
+    window.Paddle.Checkout.open(open);
     return true;
   }
-  function paddleCheckout(token, info) {
-    if (paddleRun(token, info.id)) return;
-    paddleQueue.push({ token: token, id: info.id, url: info.url });
+  /* Paddle 允许调用方预填结账页，不需要任何 API 权限。点"微信支付"的人已经表明自己从中国付款，
+     所以直接把国家定成中国 —— 否则 Paddle 按 IP 填德国，德国要邮编、而且微信根本不会出现。
+     选中国的买家看不到邮编字段（实测），所以这条路只剩扫码一步。 */
+  function paddleCustomer(currency) {
+    var c = {};
+    var email = String(prefs.user || "");
+    if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) c.email = email;
+    if (String(currency || "").toUpperCase() === "CNY") c.address = { countryCode: "CN" };
+    return Object.keys(c).length ? c : null;
+  }
+  function paddleCheckout(token, info, customer) {
+    if (paddleRun(token, info.id, customer)) return;
+    paddleQueue.push({ token: token, id: info.id, url: info.url, customer: customer });
     if (paddleLoaded) return;
     paddleLoaded = true;
     var sc = document.createElement("script");
@@ -1306,7 +1318,7 @@
     sc.async = true; sc.defer = true;
     sc.onload = function () {
       var q = paddleQueue; paddleQueue = [];
-      q.forEach(function (it) { if (!paddleRun(it.token, it.id) && it.url) location.href = it.url; });
+      q.forEach(function (it) { if (!paddleRun(it.token, it.id, it.customer) && it.url) location.href = it.url; });
     };
     sc.onerror = function () {
       var q = paddleQueue; paddleQueue = [];

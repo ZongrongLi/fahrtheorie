@@ -503,3 +503,41 @@ test('browsing without paying does not start any polling', async () => {
   await new Promise((r) => setTimeout(r, 250));
   assert.deepEqual(calls, [], 'no checkout opened means no repeated account reads');
 });
+
+/* Paddle lets the caller prefill the checkout through Checkout.open's `customer` object, with no
+   API permission needed. A buyer who clicked WeChat Pay has already said they are paying from
+   China, so the overlay must open on China - otherwise Paddle geolocates them to Germany, the form
+   demands a German postcode, and WeChat never appears. */
+const wechatPrefs = { apiBase: 'https://dtt-backend.tiancai110a.workers.dev', token: 'tok', user: 'buyer@example.com', uid: 'u1' };
+
+async function openArgsFor(attrs) {
+  const opened = [];
+  const { context, listeners } = load({
+    prefs: wechatPrefs, payMethods: wechatMethods, checkout: PADDLE_CREATED,
+  });
+  context.window.Paddle = {
+    Environment: { set() {} }, Initialize() {}, Checkout: { open(a) { opened.push(a); } },
+  };
+  context.window.testShowUnlock();
+  await tick();
+  clickPay(listeners, attrs);
+  await tick();
+  await new Promise((r) => setTimeout(r, 150));   // Paddle.js loads lazily, then replays the queue
+  return opened;
+}
+
+test('the WeChat entry opens the checkout already set to China', async () => {
+  const opened = await openArgsFor({ 'data-provider': 'paddle', 'data-currency': 'CNY' });
+  assert.equal(opened.length, 1, 'exactly one checkout must open');
+  assert.equal(opened[0].customer.address.countryCode, 'CN',
+    'a buyer who chose WeChat must not have to switch the country by hand');
+  assert.equal(opened[0].customer.email, 'buyer@example.com', 'the account email should be prefilled');
+});
+
+test('the ordinary Paddle entry prefills only the email, never a forced country', async () => {
+  const opened = await openArgsFor({ 'data-provider': 'paddle' });
+  assert.equal(opened.length, 1);
+  assert.equal(opened[0].customer.email, 'buyer@example.com');
+  assert.equal(opened[0].customer.address, undefined,
+    'a German buyer must stay on Paddle geolocated country, not be pushed to China');
+});
