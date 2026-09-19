@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
-        '<p class="fineprint">build v64 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v65 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1358,7 +1358,18 @@
       if (prov.stripe) btns += '<button class="btn primary" data-act="pay" data-provider="stripe">' + esc(t("pay.stripe")) + '</button>';
       if (prov.paddle) btns += '<button class="btn primary" data-act="pay" data-provider="paddle">' + esc(t("pay.paddle")) + '</button>';
       var note = document.querySelector('[data-role="pay-note"]');
-      if (btns) { box.insertAdjacentHTML("afterbegin", btns); if (note) note.textContent = t("pay.note"); }
+      if (btns) {
+        box.insertAdjacentHTML("afterbegin", btns);
+        if (note) {
+          /* Paddle 只在交易币种是 CNY/USD 时给中国买家出微信，所以后端会按访客 IP 选币种并告诉我们。
+             会被换成当地币种的人，得在付款前看见这件事，而不是到了结账页才发现。 */
+          var base = String(((info && info.price) || {}).currency || "").toUpperCase();
+          var pcur = String((info && info.paddle_currency) || "").toUpperCase();
+          note.textContent = (pcur && pcur !== base)
+            ? t("pay.note") + " " + t("pay.paddleLocal", { c: pcur })
+            : t("pay.note");
+        }
+      }
       else if (note) note.textContent = t("support.noBuy");
     });
   }

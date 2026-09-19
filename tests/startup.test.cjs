@@ -331,3 +331,36 @@ test('unrelated Paddle events do not trigger a verification', async () => {
   await tick();
   assert.deepEqual(calls, [], 'only checkout.completed may call the verifier');
 });
+
+/* Paddle only offers WeChat Pay when the transaction is in CNY/USD, so the backend now picks a
+   settlement currency per visitor and reports it as `paddle_currency`. A buyer who will be charged
+   in something other than the price currency must be told in the dialog, not surprised by it. */
+test('a visitor who will be charged in a local currency is told so before paying', async () => {
+  const { context, nodes } = load({
+    prefs: signedIn,
+    payMethods: {
+      providers: { stripe: true, paddle: true },
+      price: { cents: 500, currency: 'eur', name: 'Unlimited AI (one-off)' },
+      paddle_token: 'test_ctk_cur', paddle_currency: 'CNY',
+    },
+  });
+  context.window.testShowUnlock();
+  await tick();
+  assert.match(nodes['pay-note'].textContent, /CNY/,
+    'the dialog must name the currency this buyer will actually be charged in');
+});
+
+test('no settlement-currency hint when the buyer pays in the price currency', async () => {
+  const { context, nodes } = load({
+    prefs: signedIn,
+    payMethods: {
+      providers: { stripe: true, paddle: true },
+      price: { cents: 500, currency: 'eur', name: 'Unlimited AI (one-off)' },
+      paddle_token: 'test_ctk_cur', paddle_currency: '',
+    },
+  });
+  context.window.testShowUnlock();
+  await tick();
+  assert.equal(nodes['pay-note'].textContent, context.window.I18N.zh['pay.note'],
+    'a German buyer must not be shown a CNY hint');
+});

@@ -140,3 +140,18 @@ test('favicon and apple-touch icons are shipped and referenced', () => {
     assert.ok(html.includes('apple-touch-icon.png'), `${page} lacks an apple-touch icon`);
   }
 });
+
+/* The backend picks a settlement currency per visitor so that WeChat Pay can appear at all
+   (Paddle requires CNY/USD, not just a Chinese address). The dialog promises that currency, so the
+   placeholder must survive in every pack — a translation that drops {c} silently prints "{c}". */
+test('the local-currency note keeps its placeholder in every language', () => {
+  const I = packs();
+  const base = I.en['pay.paddleLocal'];
+  for (const lang of LANGS) {
+    const line = I[lang]['pay.paddleLocal'];
+    assert.ok(line, `${lang}: pay.paddleLocal is missing`);
+    if (lang !== "en") assert.notEqual(line, base, `${lang}: pay.paddleLocal was left in English`);
+    assert.match(line, /\{c\}/, `${lang}: pay.paddleLocal must interpolate the currency as {c}`);
+    assert.match(line, /WeChat|微信/i, `${lang}: pay.paddleLocal should explain the WeChat link`);
+  }
+});
