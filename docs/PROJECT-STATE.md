@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v69**.
+Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v70**.
 
 ## Where things live
 
@@ -23,6 +23,11 @@ Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v69**.
 | v63 | `862eba7` | `checkout.completed` posts the transaction id to `/api/paddle/verify` |
 | v64 | `7fe6a61` | The Paddle button says "WeChat Pay / local methods", not Alipay (Alipay needs Paddle approval; a test now blocks re-promising it) |
 | v65 | `c3b3f35` | The unlock dialog names the currency this buyer will be charged in, now that the backend picks one per country so WeChat Pay can appear |
+| v66 | `81dd00f` | Paid state syncs from the server in both directions - an account reset server-side no longer stays "paid" in the browser forever |
+| v67 | `423ab6b` | A dedicated WeChat Pay entry that asks the backend for a CNY transaction, instead of guessing from the visitor IP |
+| v68 | `1da3a71` | The plain Paddle button no longer says WeChat Pay - it opens a EUR transaction, where Paddle never offers WeChat |
+| v69 | `26d5c55` + `faa4ffc` | Refund and withdrawal policy removed on the owner's instruction, with its links, terms section, dialog notice and both i18n keys |
+| v70 | `d6f2c32` | After a Paddle checkout completes or closes, the client re-reads `/api/me` for up to 30s so a paid account updates without a manual refresh |
 
 Why this was needed: Paddle's `transaction.checkout.url` means "open the checkout on this page"
 and requires Paddle.js - it is not a post-payment redirect like Stripe's session URL. Verified
@@ -119,6 +124,14 @@ back only together with a refund API call and access revocation.
 refund wording (title and heading included - the first pass missed those), if `refunds.html`
 reappears, or if either i18n key comes back.
 
+## v70: payment no longer needs a manual refresh
+
+`checkout.completed` can arrive before Paddle's own API marks the transaction paid, and sometimes the
+webhook is the only thing that unlocks. The client used to fire one verify and stop, so a buyer whose
+verify got a 402 sat looking at a locked UI until they refreshed by hand. `watchPaid()` now re-reads
+`/api/me` immediately and then every 2s for up to 30s, on both `checkout.completed` and
+`checkout.closed`, and stops as soon as the account flips. Nothing polls if no checkout was opened.
+
 ## Current payment state
 
 | Provider | State |
@@ -133,7 +146,7 @@ default-payment-link step.
 
 ## Verification evidence
 
-- Front end: `node tests/startup.test.cjs` 26, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **43 passed, 0 failed**
+- Front end: `node tests/startup.test.cjs` 29, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **46 passed, 0 failed**
 - v69 verified live: `refunds.html` returns 404 and zero refund words remain in `index.html`, `app.js`,
   `i18n.js`, `privacy.html`, `terms.html`; all five files md5-match local
 - Backend: `dtt-backend` `node test.mjs` -> **85 passed, 0 failed** (was 53 before this work)
