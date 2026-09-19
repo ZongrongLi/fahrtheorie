@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v65**.
+Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v66**.
 
 ## Where things live
 
@@ -90,14 +90,21 @@ default-payment-link step.
 
 ## Verification evidence
 
-- Front end: `node tests/startup.test.cjs` 20, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **37 passed, 0 failed**
+- Front end: `node tests/startup.test.cjs` 23, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **40 passed, 0 failed**
 - Backend: `dtt-backend` `node test.mjs` -> **74 passed, 0 failed** (was 53 before this work)
 - Real sandbox payment on the live site: transaction `txn_01m2v6755skgkrrxnnzvwh3nb2`,
   status `completed`, EUR 5.00, `custom_data.uid` preserved end to end;
   `POST /api/paddle/verify` with that id returned `{"ok":true,"unlimited":true,"provider":"paddle"}`,
   `GET /api/me` then showed `unlimited:true`, and a second account verifying the same transaction
   got **403**. Screenshots: `outputs/dtt_v62_*.png`, `dtt_v61_paddle_overlay.png`.
-- Live site serves `build v65`; `app.js` contains `eventCallback` and the v2 CDN URL.
+- Live site serves `build v66`; `app.js` contains `eventCallback` and the v2 CDN URL.
+- v66 bug: `refreshQuota()` only ever did `if (j.unlimited === true) prefs.unlimited = true`, never the
+  other way, so `prefs.unlimited` was sticky - clearing an account in KV changed nothing on screen. Now
+  the server value is mirrored both ways, while a failed `/api/me` leaves the flag alone (a network
+  error must not lock out someone who paid). Verified live by seeding `unlimited:true` into
+  localStorage and reloading: the client rewrote it to `false`.
+  ⚠️ When clearing a paid account, clearing KV is **not** enough on its own - the client cache used to
+  win. Test it through the UI, not just through `/api/me`.
 - v65 release triple checked live: 7 x `?v=65` in `index.html`, `build v65` in the rail and in About,
   plus `styles.css?v=65` on all three legal pages; 10 key files md5-identical to local; i18n at
   **326 keys x 10 packs**, no gaps and no empty values.
