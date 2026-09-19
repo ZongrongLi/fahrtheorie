@@ -41,8 +41,11 @@ test('all 10 UI packs expose the same key set and no empty strings', () => {
    This guard keeps it from creeping back through a translation or a stray link. */
 test('no refund promise survives anywhere', () => {
   assert.equal(exists('refunds.html'), false, 'refunds.html must stay deleted');
-  for (const f of ['index.html', 'app.js', 'privacy.html', 'terms.html', 'README.md']) {
-    assert.equal(read(f).includes('refunds.html'), false, `${f} must not link the refund page`);
+  for (const f of ['index.html', 'app.js', 'privacy.html', 'terms.html']) {
+    const src = read(f);
+    assert.equal(src.includes('refunds.html'), false, `${f} must not link the refund page`);
+    // a page title or heading can carry the same promise without any link at all
+    assert.equal(/退款|refund|撤回|Widerruf|erstatt/i.test(src), false, `${f} still carries refund wording`);
   }
   const I = packs();
   for (const lang of LANGS) {

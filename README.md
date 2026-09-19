@@ -126,7 +126,7 @@ app.js                应用逻辑（路由、刷题、错题本、笔记、模�
 i18n.js               界面文案（10 个语言包：zh/en/de/ru/tr/uk/pl/ro/vi/ar，键名一一对齐）
 ai.js                 AI 双引擎（离线讲解 + 可选大模型）
 privacy.html          隐私政策（中/英）
-terms.html            服务条款（中/英，含退款摘要）
+terms.html            服务条款（中/英）
 favicon.svg|png|ico   站点图标；apple-touch-icon.png 给 iOS
 data/questions.js     题库数据
 data/zh.js            中文译文 + 中文主语
@@ -168,8 +168,9 @@ node -e "global.window={};require('./i18n.js');var I=window.I18N,b=Object.keys(I
 git add -A && git commit -m "build vNN: ..." && git push origin main   # push 即上线 GitHub Pages
 ```
 
-`tests/legal.test.cjs` 额外盯住：三件套版本号一致、三个法务页（隐私/条款/退款）互相链接、
-解锁弹窗付款前显示撤回权说明、侧栏与首页页脚的法律链接、图标文件存在且被引用。
+`tests/legal.test.cjs` 额外盯住：三件套版本号一致、两个法务页（隐私/条款）互相链接、
+侧栏与首页页脚的法律链接、图标文件存在且被引用，以及**页面上不许再出现任何退款承诺**
+（没有退款接口、也无法在退款后收回已解锁，所以这类文案一律不留）。
 
 ## 质量说明
 
