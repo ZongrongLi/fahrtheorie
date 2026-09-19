@@ -76,6 +76,26 @@ webhook handlers (dead code directly after a guard that already returns when the
 it read as if verification were optional). Behaviour is unchanged - `node test.mjs` 66/66 before and
 after - and the worker was redeployed (version `dd132d9a`).
 
+## v69 (backend only): returning buyers skip the details form
+
+Paddle requires an email and a country because it is the Merchant of Record - it issues the invoice
+and needs the country for VAT and for which methods are lawful. Those fields cannot be removed from
+Paddle's own checkout, but they can be prefilled: `POST /transactions` accepts `customer_id` and
+`address_id`, and when both are present the details step disappears entirely.
+
+Verified against the live deployment: a repeat order came back as `txn_01m2w8z8st0shnxvdjc7ejmkwp`
+carrying both ids, and its checkout rendered with **no email, country or postcode field** - just a
+"Pay EUR 5.00" button.
+
+The two ids are captured at payment time, from both paths that mark an account paid
+(`/api/paddle/verify` and the signed webhook), and stored on the user as `paddleCustomer` /
+`paddleAddress`. No new API permission was needed - the transaction we are already allowed to read
+carries them.
+
+One deliberate exception: passing `address_id` also pins the country, which would lock out exactly
+the people who need to change it. So when the buyer clicks the WeChat entry (which asks for CNY),
+only the email is prefilled and the country dropdown stays on screen.
+
 ## Current payment state
 
 | Provider | State |
@@ -91,7 +111,7 @@ default-payment-link step.
 ## Verification evidence
 
 - Front end: `node tests/startup.test.cjs` 26, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **43 passed, 0 failed**
-- Backend: `dtt-backend` `node test.mjs` -> **74 passed, 0 failed** (was 53 before this work)
+- Backend: `dtt-backend` `node test.mjs` -> **85 passed, 0 failed** (was 53 before this work)
 - Real sandbox payment on the live site: transaction `txn_01m2v6755skgkrrxnnzvwh3nb2`,
   status `completed`, EUR 5.00, `custom_data.uid` preserved end to end;
   `POST /api/paddle/verify` with that id returned `{"ok":true,"unlimited":true,"provider":"paddle"}`,
