@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v66**.
+Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v68**.
 
 ## Where things live
 
@@ -90,7 +90,7 @@ default-payment-link step.
 
 ## Verification evidence
 
-- Front end: `node tests/startup.test.cjs` 23, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **40 passed, 0 failed**
+- Front end: `node tests/startup.test.cjs` 26, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **43 passed, 0 failed**
 - Backend: `dtt-backend` `node test.mjs` -> **74 passed, 0 failed** (was 53 before this work)
 - Real sandbox payment on the live site: transaction `txn_01m2v6755skgkrrxnnzvwh3nb2`,
   status `completed`, EUR 5.00, `custom_data.uid` preserved end to end;
@@ -131,7 +131,10 @@ default-payment-link step.
    (`outputs/dtt_v65_real_cny_wechat.png`).
    Still open: a CN integer price via `unit_price_overrides` (¥38.48 reads badly), and Alipay, which
    needs separate Paddle approval and is not in the toggle list at all.
-5. Native-speaker review for the eight machine-translated packs.
+5. WeChat Pay still needs a **live** Paddle account before a real payment can complete; in the sandbox
+   the button renders and the QR appears, but there is no real WeChat settlement to scan.
+6. A CN integer price via `unit_price_overrides` (¥38.48 reads badly next to "€5").
+7. Native-speaker review for the eight machine-translated packs.
 
 ## Local development
 
