@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v68**.
+Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v69**.
 
 ## Where things live
 
@@ -98,6 +98,27 @@ One deliberate exception: passing `address_id` also pins the country, which woul
 the people who need to change it. So when the buyer clicks the WeChat entry (which asks for CNY),
 only the email is prefilled and the country dropdown stays on screen.
 
+## v69: the refund and withdrawal policy was removed - by the owner, on purpose
+
+`refunds.html`, its links in the rail / home footer / About card / both legal pages, the refund
+section in `terms.html`, the pre-payment withdrawal notice in the unlock dialog, and the two i18n
+keys (`legal.refunds`, `ai.refundNote`) are all gone - 327 keys back down to **325 x 10 packs**.
+
+The reason is a real gap, not a style choice: there is no refund endpoint, and nothing revokes
+`unlimited` after a refund, so "unused unlocks are fully refundable within 14 days, processed in 3
+working days" was a promise with nothing behind it.
+
+**Do not re-add it as a "completeness" fix.** The owner was told the two consequences and accepted
+them anyway: the EU 14-day withdrawal right for digital content sold to German consumers is
+statutory, so not informing buyers can stretch the window to as long as 12 months rather than
+removing it; and Paddle's website approval asks the site to link terms / privacy / refund pages,
+which is the basis on which this sandbox domain was approved. If refunds ever come back, they come
+back only together with a refund API call and access revocation.
+
+`tests/legal.test.cjs` now guards the opposite direction: it fails if any shipped page carries
+refund wording (title and heading included - the first pass missed those), if `refunds.html`
+reappears, or if either i18n key comes back.
+
 ## Current payment state
 
 | Provider | State |
@@ -113,6 +134,8 @@ default-payment-link step.
 ## Verification evidence
 
 - Front end: `node tests/startup.test.cjs` 26, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **43 passed, 0 failed**
+- v69 verified live: `refunds.html` returns 404 and zero refund words remain in `index.html`, `app.js`,
+  `i18n.js`, `privacy.html`, `terms.html`; all five files md5-match local
 - Backend: `dtt-backend` `node test.mjs` -> **85 passed, 0 failed** (was 53 before this work)
 - Real sandbox payment on the live site: transaction `txn_01m2v6755skgkrrxnnzvwh3nb2`,
   status `completed`, EUR 5.00, `custom_data.uid` preserved end to end;
