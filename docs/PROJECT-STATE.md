@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v64**.
+Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v65**.
 
 ## Where things live
 
@@ -22,6 +22,7 @@ Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v64**.
 | v62 | `c55c07f` | Fix the environment probes; `Paddle.Environment.set()` from the token prefix |
 | v63 | `862eba7` | `checkout.completed` posts the transaction id to `/api/paddle/verify` |
 | v64 | `7fe6a61` | The Paddle button says "WeChat Pay / local methods", not Alipay (Alipay needs Paddle approval; a test now blocks re-promising it) |
+| v65 | `c3b3f35` | The unlock dialog names the currency this buyer will be charged in, now that the backend picks one per country so WeChat Pay can appear |
 
 Why this was needed: Paddle's `transaction.checkout.url` means "open the checkout on this page"
 and requires Paddle.js - it is not a post-payment redirect like Stripe's session URL. Verified
@@ -89,14 +90,17 @@ default-payment-link step.
 
 ## Verification evidence
 
-- Front end: `node tests/startup.test.cjs` 18, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 10 -> **34 passed, 0 failed**
-- Backend: `dtt-backend` `node test.mjs` -> **66 passed, 0 failed** (was 53 before this work)
+- Front end: `node tests/startup.test.cjs` 20, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **37 passed, 0 failed**
+- Backend: `dtt-backend` `node test.mjs` -> **74 passed, 0 failed** (was 53 before this work)
 - Real sandbox payment on the live site: transaction `txn_01m2v6755skgkrrxnnzvwh3nb2`,
   status `completed`, EUR 5.00, `custom_data.uid` preserved end to end;
   `POST /api/paddle/verify` with that id returned `{"ok":true,"unlimited":true,"provider":"paddle"}`,
   `GET /api/me` then showed `unlimited:true`, and a second account verifying the same transaction
   got **403**. Screenshots: `outputs/dtt_v62_*.png`, `dtt_v61_paddle_overlay.png`.
-- Live site serves `build v64`; `app.js` contains `eventCallback` and the v2 CDN URL.
+- Live site serves `build v65`; `app.js` contains `eventCallback` and the v2 CDN URL.
+- v65 release triple checked live: 7 x `?v=65` in `index.html`, `build v65` in the rail and in About,
+  plus `styles.css?v=65` on all three legal pages; 10 key files md5-identical to local; i18n at
+  **326 keys x 10 packs**, no gaps and no empty values.
 - Second real sandbox payment `txn_01m2v9tjseke6hm6f1ff9sbfdg` (EUR 5.00, `completed`,
   `custom_data.uid` = the payer's uid) unlocked **through the webhook alone** after the retry.
 - KV cleaned afterwards: the two throwaway accounts (6 keys) were deleted, back to the 8-key baseline.
@@ -109,12 +113,17 @@ default-payment-link step.
    destination + `PADDLE_WEBHOOK_SECRET`**; the sandbox secret will not verify live traffic, and
    fail-closed means live payments would then 503 rather than unlock.
 4. Refund handling: we never revoke `unlimited` (Paddle refunds arrive as `adjustment.*`).
-5. **WeChat Pay cannot appear today** - not a settings problem. Paddle only offers it for
-   `country = CN` **and** a `CNY`/`USD` transaction, and `POST /api/paddle/checkout` never sends a
-   currency, so every transaction inherits the EUR price. Proven both ways in the sandbox: China +
-   EUR shows PayPal and card only; China + CNY (¥38.48) shows a WeChat Pay button. The v64 button
-   label therefore still over-promises; either drop the WeChat wording or pass `currency_code`
-   (plus a CN price override) - product decision, see `dtt-backend/PADDLE-ONBOARDING.md` 第 2.4 步.
+5. ~~WeChat Pay cannot appear~~ **fixed in v65.** Paddle only offers it for `country = CN` **and** a
+   `CNY`/`USD` transaction, and the checkout call used to send no currency, so every transaction
+   inherited the EUR price. `paddleCurrency()` now maps the visitor's country (`request.cf.country`)
+   through `PADDLE_LOCAL_CURRENCIES` (default `CN:CNY`); everything else still sends no currency at
+   all, so German buyers are unaffected - verified live, `paddle_currency` is `""` from a German IP.
+   Proof it works end to end: with the mapping temporarily set to `DE:CNY`, a real
+   `/api/paddle/checkout` produced `txn_01m2w5cdr39d9s9f15gpn67ytg` stored as CNY 3848, and that
+   transaction's checkout page rendered the WeChat Pay button
+   (`outputs/dtt_v65_real_cny_wechat.png`).
+   Still open: a CN integer price via `unit_price_overrides` (¥38.48 reads badly), and Alipay, which
+   needs separate Paddle approval and is not in the toggle list at all.
 5. Native-speaker review for the eight machine-translated packs.
 
 ## Local development
