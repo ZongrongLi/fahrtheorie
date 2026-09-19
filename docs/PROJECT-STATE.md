@@ -78,6 +78,8 @@ after - and the worker was redeployed (version `dd132d9a`).
 
 ## v69 (backend only): returning buyers skip the details form
 
+Deployed as Worker version `89c8a482`; no front-end file changed, so the live build stays **v68**.
+
 Paddle requires an email and a country because it is the Merchant of Record - it issues the invoice
 and needs the country for VAT and for which methods are lawful. Those fields cannot be removed from
 Paddle's own checkout, but they can be prefilled: `POST /transactions` accepts `customer_id` and
