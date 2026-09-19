@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v70**.
+Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v71**.
 
 ## Where things live
 
@@ -28,6 +28,7 @@ Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v70**.
 | v68 | `1da3a71` | The plain Paddle button no longer says WeChat Pay - it opens a EUR transaction, where Paddle never offers WeChat |
 | v69 | `26d5c55` + `faa4ffc` | Refund and withdrawal policy removed on the owner's instruction, with its links, terms section, dialog notice and both i18n keys |
 | v70 | `d6f2c32` | After a Paddle checkout completes or closes, the client re-reads `/api/me` for up to 30s so a paid account updates without a manual refresh |
+| v71 | `146984b` | The checkout opens with the account email prefilled, and the WeChat entry pins the country to China, so the buyer lands straight on the payment step |
 
 Why this was needed: Paddle's `transaction.checkout.url` means "open the checkout on this page"
 and requires Paddle.js - it is not a post-payment redirect like Stripe's session URL. Verified
@@ -132,6 +133,25 @@ verify got a 402 sat looking at a locked UI until they refreshed by hand. `watch
 `/api/me` immediately and then every 2s for up to 30s, on both `checkout.completed` and
 `checkout.closed`, and stops as soon as the account flips. Nothing polls if no checkout was opened.
 
+## v71: the WeChat path no longer shows a form at all
+
+Paddle geolocates its checkout from the visitor IP, so a Chinese buyer on a European IP landed on a
+**German** form - which demands a postcode, and with country = Germany Paddle never offers WeChat.
+That is why "I chose WeChat and still got card".
+
+`Paddle.Checkout.open()` accepts a `customer` object - `customer.email` and
+`customer.address.countryCode` - and this needs **no API permission at all**, unlike creating a
+customer or address (both `forbidden` for our keys). So the account email is always prefilled, and
+the WeChat entry additionally pins the country to `CN`.
+
+Verified on the live site: clicking 微信支付 now opens directly on the Payment step with the WeChat
+Pay button visible - no email field, no country dropdown, no postcode (`outputs/
+dtt_v71_wechat_direct_no_form.png`). Also measured: for country = China Paddle does not render a
+postcode field at all, so the remaining fields on a first purchase are email plus country only.
+
+The ordinary Paddle entry deliberately does **not** force a country - a German buyer stays on their
+geolocated country and keeps PayPal and card.
+
 ## Current payment state
 
 | Provider | State |
@@ -146,7 +166,7 @@ default-payment-link step.
 
 ## Verification evidence
 
-- Front end: `node tests/startup.test.cjs` 29, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **46 passed, 0 failed**
+- Front end: `node tests/startup.test.cjs` 31, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **48 passed, 0 failed**
 - v69 verified live: `refunds.html` returns 404 and zero refund words remain in `index.html`, `app.js`,
   `i18n.js`, `privacy.html`, `terms.html`; all five files md5-match local
 - Backend: `dtt-backend` `node test.mjs` -> **85 passed, 0 failed** (was 53 before this work)
