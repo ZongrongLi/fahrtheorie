@@ -541,3 +541,30 @@ test('the ordinary Paddle entry prefills only the email, never a forced country'
   assert.equal(opened[0].customer.address, undefined,
     'a German buyer must stay on Paddle geolocated country, not be pushed to China');
 });
+
+/* PayPal is only promised once Stripe actually reports the capability. When it does, the Paddle
+   "local methods" button becomes redundant and must go, so the site is back to two buttons -
+ but the WeChat entry stays, because Stripe cannot offer WeChat. */
+const stripePaypalMethods = Object.assign({}, wechatMethods, { stripe_paypal: true });
+
+test('with Stripe PayPal enabled the chooser collapses to card+PayPal and WeChat', async () => {
+  const { context, nodes } = load({ prefs: signedIn, payMethods: stripePaypalMethods });
+  context.window.testShowUnlock();
+  await tick();
+  assert.match(nodes['pay-btns'].inserted, /data-provider="stripe"/, 'the Stripe entry stays');
+  assert.match(nodes['pay-btns'].inserted, /data-currency="CNY"/, 'the WeChat entry stays');
+  assert.equal(/data-act="pay" data-provider="paddle">/.test(nodes['pay-btns'].inserted), false,
+    'the plain Paddle button must be dropped once Stripe covers PayPal');
+  assert.match(nodes['pay-btns'].inserted, new RegExp(context.window.I18N.zh['pay.stripePaypal'].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    'the Stripe button must name PayPal when it can actually deliver it');
+});
+
+test('without Stripe PayPal the button must not say PayPal and Paddle stays', async () => {
+  const { context, nodes } = load({ prefs: signedIn, payMethods: wechatMethods });
+  context.window.testShowUnlock();
+  await tick();
+  assert.equal(/PayPal/i.test(nodes['pay-btns'].inserted), false,
+    'never advertise PayPal that Stripe has not enabled');
+  assert.match(nodes['pay-btns'].inserted, /data-act="pay" data-provider="paddle">/,
+    'Paddle is the only PayPal route until Stripe turns it on');
+});

@@ -156,6 +156,19 @@ test('favicon and apple-touch icons are shipped and referenced', () => {
 /* The backend picks a settlement currency per visitor so that WeChat Pay can appear at all
    (Paddle requires CNY/USD, not just a Chinese address). The dialog promises that currency, so the
    placeholder must survive in every pack — a translation that drops {c} silently prints "{c}". */
+/* pay.stripePaypal is only shown when Stripe reports the PayPal capability, so it must name
+   PayPal (that is the whole reason it exists) and must not reach for WeChat, which Stripe cannot do. */
+test('the Stripe PayPal label names PayPal and nothing it cannot deliver', () => {
+  const I = packs();
+  for (const lang of LANGS) {
+    const label = I[lang]['pay.stripePaypal'];
+    assert.ok(label, `${lang} lacks pay.stripePaypal`);
+    assert.match(label, /paypal/i, `${lang}: the label must name PayPal`);
+    assert.equal(/wechat|微信/i.test(label), false, `${lang}: Stripe cannot offer WeChat Pay`);
+    assert.notEqual(label, I[lang]['pay.stripe'], `${lang}: the two Stripe labels must differ`);
+  }
+});
+
 test('the local-currency note keeps its placeholder in every language', () => {
   const I = packs();
   const base = I.en['pay.paddleLocal'];

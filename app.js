@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v71 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v72 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1404,8 +1404,11 @@
       if (!box) return;
       var prov = (info && info.providers) || {};
       var btns = "";
-      if (prov.stripe) btns += '<button class="btn primary" data-act="pay" data-provider="stripe">' + esc(t("pay.stripe")) + '</button>';
-      if (prov.paddle) btns += '<button class="btn primary" data-act="pay" data-provider="paddle">' + esc(t("pay.paddle")) + '</button>';
+      var paypalReady = info && info.stripe_paypal === true;
+      if (prov.stripe) btns += '<button class="btn primary" data-act="pay" data-provider="stripe">' + esc(t(paypalReady ? "pay.stripePaypal" : "pay.stripe")) + '</button>';
+      /* Paddle 那个"本地支付"按钮目前是 PayPal 的唯一入口。Stripe 一旦开通 PayPal 它就重复了，
+         所以到时候自动收掉；没开通之前不能提前删，也不能提前把 PayPal 写进 Stripe 的文案。 */
+      if (prov.paddle && !paypalReady) btns += '<button class="btn primary" data-act="pay" data-provider="paddle">' + esc(t("pay.paddle")) + '</button>';
       /* Paddle 只在交易币种是 CNY/USD 且结账页国家选中国时才出微信，而 IP 判断不了人（挂欧洲 VPN 的中国人）。
          所以给一个明确入口：点它就直接开一笔人民币的单。后端没列出可用币种时这个按钮不出现，不空口许诺。 */
       var wxc = (info && info.paddle_wechat_currencies) || [];
