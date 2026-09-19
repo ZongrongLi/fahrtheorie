@@ -11,7 +11,7 @@ const marker = '  window.__boot = boot;';
 assert.equal(appSource.split(marker).length, 2, 'boot marker must be unique');
 const instrumented = appSource.replace(marker,
   '  window.testPrefs = prefs;\n  window.testShowUnlock = showUnlock;\n' +
-  '  window.testHandlePaidReturn = handlePaidReturn;\n  window.testDoCheckout = doCheckout;\n' + marker);
+  '  window.testHandlePaidReturn = handlePaidReturn;\n  window.testDoCheckout = doCheckout;\n  window.testRefreshQuota = refreshQuota;\n' + marker);
 
 function stubNode() {
   return {
@@ -22,7 +22,7 @@ function stubNode() {
   };
 }
 
-function load({ prefs = {}, payMethods, search = '', checkout } = {}) {
+function load({ prefs = {}, payMethods, search = '', checkout, me, meFail = false } = {}) {
   const nodes = {}, calls = [], bodies = [], scripts = [], listeners = {};
   const nav = [];
   const context = {
@@ -55,6 +55,10 @@ function load({ prefs = {}, payMethods, search = '', checkout } = {}) {
       bodies.push(init && init.body ? String(init.body) : '');
       // 回跳类请求只断言"发了什么"，响应直接失败：verifyPayment 的 catch 会静默收尾，不级联刷新
       if (String(url).includes('/verify')) return Promise.reject(new Error('assert-request-only'));
+      if (/\/api\/me$/.test(String(url))) {
+        if (meFail) return Promise.reject(new Error('offline'));
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(me || {}) });
+      }
       if (/\/checkout$|\/paddle\/checkout$/.test(String(url)) && checkout) {
         return Promise.resolve({ json: () => Promise.resolve(checkout) });
       }
@@ -363,4 +367,32 @@ test('no settlement-currency hint when the buyer pays in the price currency', as
   await tick();
   assert.equal(nodes['pay-note'].textContent, context.window.I18N.zh['pay.note'],
     'a German buyer must not be shown a CNY hint');
+});
+
+/* The backend is the only source of truth for "has this account paid". The client used to flip
+   prefs.unlimited to true and never back, so an account reset server-side kept showing as paid in
+   the browser forever. */
+const paidPrefs = { apiBase: 'https://dtt-backend.tiancai110a.workers.dev', token: 'tok', unlimited: true };
+
+test('an account that is no longer paid on the server stops showing as paid', async () => {
+  const { context } = load({ prefs: paidPrefs, me: { user: 'a', uid: 'u1', left: 19, unlimited: false } });
+  context.window.testRefreshQuota();
+  await tick();
+  assert.equal(context.window.testPrefs.unlimited, false,
+    'a reset account must not stay unlocked in the browser');
+});
+
+test('a paid account stays unlocked when the server confirms it', async () => {
+  const { context } = load({ prefs: paidPrefs, me: { user: 'a', uid: 'u1', left: 19, unlimited: true } });
+  context.window.testRefreshQuota();
+  await tick();
+  assert.equal(context.window.testPrefs.unlimited, true);
+});
+
+test('an unreachable /api/me must not lock out a paying user', async () => {
+  const { context } = load({ prefs: paidPrefs, meFail: true });
+  context.window.testRefreshQuota();
+  await tick();
+  assert.equal(context.window.testPrefs.unlimited, true,
+    'a failed request is not evidence that the account stopped being paid');
 });

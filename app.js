@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
-        '<p class="fineprint">build v65 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v66 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1113,7 +1113,16 @@
     if (!apiRoot() || !prefs.token) return;
     fetch(apiRoot() + "/api/me", { headers: { Authorization: "Bearer " + prefs.token } })
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (j) { if (j && typeof j.left === "number") { prefs.serverLeft = j.left; if (j.unlimited === true) prefs.unlimited = true; savePrefs(); if (session) rerenderQuiz(); } })
+      .then(function (j) {
+        if (!j || typeof j.left !== "number") return;
+        prefs.serverLeft = j.left;
+        /* 付款状态以服务器为准，两个方向都要同步。之前只往 true 翻、从不翻回 false，
+           所以后台把账号重置成未购之后，浏览器会永远显示已解锁。请求失败走 catch，
+           不动 unlimited —— 查不到不等于没付款，不能把付过的人锁在外面。 */
+        if ("unlimited" in j) prefs.unlimited = j.unlimited === true;
+        savePrefs();
+        if (session) rerenderQuiz();
+      })
       .catch(function () {});
   }
   function applyServerAI() {
