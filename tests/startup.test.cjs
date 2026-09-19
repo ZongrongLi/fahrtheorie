@@ -11,7 +11,7 @@ const marker = '  window.__boot = boot;';
 assert.equal(appSource.split(marker).length, 2, 'boot marker must be unique');
 const instrumented = appSource.replace(marker,
   '  window.testPrefs = prefs;\n  window.testShowUnlock = showUnlock;\n' +
-  '  window.testHandlePaidReturn = handlePaidReturn;\n  window.testDoCheckout = doCheckout;\n  window.testRefreshQuota = refreshQuota;\n' + marker);
+  '  window.testHandlePaidReturn = handlePaidReturn;\n  window.testDoCheckout = doCheckout;\n  window.testRefreshQuota = refreshQuota;\n  window.testPaddleEvent = paddleEvent;\n' + marker);
 
 function stubNode() {
   return {
@@ -65,7 +65,7 @@ function load({ prefs = {}, payMethods, search = '', checkout, me, meFail = fals
       if (!payMethods) return Promise.reject(new Error('offline'));
       return Promise.resolve({ json: () => Promise.resolve(payMethods) });
     },
-    setTimeout, clearTimeout,
+    setTimeout, clearTimeout, setInterval, clearInterval,
   };
   vm.runInNewContext(i18nSource, context);
   vm.runInNewContext(instrumented, context);
@@ -313,7 +313,10 @@ test('checkout.completed verifies the transaction with our backend', async () =>
   calls.length = 0; bodies.length = 0;
   init[0].eventCallback({ event: 'checkout.completed', data: { id: 'txn_new' } });
   await tick();
-  assert.deepEqual(calls, ['https://dtt-backend.tiancai110a.workers.dev/api/paddle/verify']);
+  assert.deepEqual(calls, [
+    'https://dtt-backend.tiancai110a.workers.dev/api/paddle/verify',
+    'https://dtt-backend.tiancai110a.workers.dev/api/me',
+  ], 'verify first, then keep watching the account so nobody has to refresh by hand');
   assert.deepEqual(JSON.parse(bodies[0]), { transaction_id: 'txn_new' });
 });
 
@@ -446,4 +449,57 @@ test('no WeChat entry when the backend does not list a WeChat currency', async (
   await tick();
   assert.equal(/data-currency=/.test(nodes['pay-btns'].inserted), false,
     'never promise WeChat that cannot be delivered');
+});
+
+/* Paddle can report the checkout as finished before its own API says the transaction is paid, and
+   the webhook may be what actually unlocks. Either way the buyer must not have to refresh by hand,
+   so a payment attempt keeps re-reading /api/me until the account flips. */
+test('a payment that is not confirmed yet keeps re-checking instead of leaving the buyer stuck', async () => {
+  const { context, calls } = load({
+    prefs: signedIn,
+    payMethods: { providers: { paddle: true }, paddle_token: 'test_ctk_poll' },
+    checkout: PADDLE_OK,
+    me: { user: 'a', uid: 'u1', left: 19, unlimited: false },
+  });
+  context.window.testShowUnlock();
+  await tick();
+  context.window.Paddle = { Environment: { set() {} }, Initialize() {}, Checkout: { open() {} } };
+  context.window.testDoCheckout('paddle');
+  await tick();
+  calls.length = 0;
+  context.window.testPaddleEvent({ event: 'checkout.completed', data: { id: 'txn_poll_1' } });
+  await tick();
+  assert.ok(calls.some((c) => /\/api\/me$/.test(c)),
+    'the client must re-read the account after the checkout reports done');
+});
+
+test('closing the checkout also starts the re-check, because the webhook may be the only signal', async () => {
+  const { context, calls } = load({
+    prefs: signedIn,
+    payMethods: { providers: { paddle: true }, paddle_token: 'test_ctk_closed' },
+    checkout: PADDLE_OK,
+    me: { user: 'a', uid: 'u1', left: 19, unlimited: true },
+  });
+  context.window.testShowUnlock();
+  await tick();
+  context.window.Paddle = { Environment: { set() {} }, Initialize() {}, Checkout: { open() {} } };
+  context.window.testDoCheckout('paddle');
+  await tick();
+  calls.length = 0;
+  context.window.testPaddleEvent({ event: 'checkout.closed', data: {} });
+  await tick();
+  assert.ok(calls.some((c) => /\/api\/me$/.test(c)), 'closing without a client-side confirm must still re-check');
+  assert.equal(context.window.testPrefs.unlimited, true, 'a webhook unlock must reach the UI');
+});
+
+test('browsing without paying does not start any polling', async () => {
+  const { context, calls } = load({
+    prefs: signedIn,
+    payMethods: { providers: { paddle: true }, paddle_token: 'test_ctk_idle' },
+  });
+  context.window.testShowUnlock();
+  await tick();
+  calls.length = 0;
+  await new Promise((r) => setTimeout(r, 250));
+  assert.deepEqual(calls, [], 'no checkout opened means no repeated account reads');
 });

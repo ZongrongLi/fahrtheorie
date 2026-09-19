@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v69 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v70 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1248,12 +1248,40 @@
   }
   /* Paddle.js is only fetched when someone actually pays with Paddle. */
   var paddleLoaded = false, paddleInited = false, paddleQueue = [], paddleTxn = "";
+  /* 结账页说"付完了"不等于服务端已经认账：Paddle 自己的交易状态可能还慢几秒，
+     真正解锁的也可能是后台 webhook。所以付完之后要自己继续回头看账号状态，
+     不能让人手动刷新页面。只在真的开过结账流程之后才轮询，光逛不付款不产生请求。 */
+  var payWatchTimer = null;
+  function watchPaid() {
+    if (payWatchTimer || !apiRoot() || !prefs.token) return;
+    var tries = 0;
+    var check = function () {
+      if (tries++ > 14) { clearInterval(payWatchTimer); payWatchTimer = null; return; }
+      fetch(apiRoot() + "/api/me", { headers: { Authorization: AUTH_B + prefs.token } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          if (!j || j.unlimited !== true) return;
+          clearInterval(payWatchTimer); payWatchTimer = null;
+          prefs.unlimited = true;
+          if (typeof j.left === "number") prefs.serverLeft = j.left;
+          savePrefs(); closeModal(); toast(t("pay.done"));
+          if (session) rerenderQuiz(); else route();
+        })
+        .catch(function () {});
+    };
+    check();
+    payWatchTimer = setInterval(check, 2000);
+  }
   function paddleEvent(ev) {
     var name = (ev && ev.event) || "";
-    if (name.indexOf("checkout.completed") < 0) return;
     var d = (ev && ev.data) || {};
-    var id = String(d.id || d.transactionId || d.transaction_id || paddleTxn || "");
-    if (id) verifyPayment({ transaction_id: id });
+    if (name.indexOf("checkout.completed") >= 0) {
+      var id = String(d.id || d.transactionId || d.transaction_id || paddleTxn || "");
+      if (id) verifyPayment({ transaction_id: id });
+      watchPaid();
+      return;
+    }
+    if (name.indexOf("checkout.closed") >= 0) watchPaid();
   }
   function paddleRun(token, txnId) {
     if (!window.Paddle || !window.Paddle.Checkout || !txnId) return false;
