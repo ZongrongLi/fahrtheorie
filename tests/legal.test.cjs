@@ -54,7 +54,12 @@ test('payment labels only promise methods that are actually enabled', () => {
     const label = I[lang]['pay.paddle'];
     assert.ok(label, `${lang} lacks pay.paddle`);
     assert.equal(/alipay|支付宝/i.test(label), false, `${lang}: Alipay is not enabled (needs Paddle approval)`);
-    assert.ok(/wechat|微信/i.test(label), `${lang}: pay.paddle should name WeChat Pay, which is enabled`);
+    // The plain Paddle button opens a EUR transaction and Paddle never shows WeChat for EUR.
+    // Naming it there is the exact lie a user hit on the live site; only pay.wechat may promise WeChat.
+    assert.equal(/wechat|微信/i.test(label), false, `${lang}: pay.paddle cannot deliver WeChat Pay (EUR transaction)`);
+    const wx = I[lang]['pay.wechat'];
+    assert.ok(/wechat|微信/i.test(wx), `${lang}: pay.wechat must name WeChat Pay`);
+    assert.match(wx, /CNY|¥|人民币|元/, `${lang}: pay.wechat must say the buyer is charged in CNY`);
   }
 });
 
