@@ -396,3 +396,54 @@ test('an unreachable /api/me must not lock out a paying user', async () => {
   assert.equal(context.window.testPrefs.unlimited, true,
     'a failed request is not evidence that the account stopped being paid');
 });
+
+/* A Chinese buyer may be sitting on a European VPN, so the IP cannot decide whether WeChat Pay is
+   offered. The dialog shows an explicit entry that asks the backend for a CNY transaction. */
+const wechatMethods = {
+  providers: { stripe: true, paddle: true },
+  price: { cents: 500, currency: 'eur', name: 'Unlimited AI (one-off)' },
+  paddle_token: 'test_ctk_wc', paddle_currency: '', paddle_wechat_currencies: ['CNY', 'USD'],
+};
+const PADDLE_CREATED = { provider: 'paddle', id: 'txn_wc_1', url: 'https://sandbox-checkout.paddle.com/txn_wc_1' };
+
+function clickPay(listeners, attrs) {
+  const el = {
+    getAttribute: (k) => (k === 'data-act' ? 'pay' : (attrs[k] || null)),
+    classList: { contains() { return false; } },
+    closest(sel) { return sel.indexOf('data-act') >= 0 ? el : null; },
+  };
+  const event = { target: { closest: (sel) => (sel.indexOf('data-act') >= 0 ? el : null) }, preventDefault() {} };
+  (listeners.click || []).forEach((fn) => fn(event));
+}
+
+test('the chooser offers a dedicated WeChat Pay entry when the backend supports CNY', async () => {
+  const { context, nodes } = load({ prefs: signedIn, payMethods: wechatMethods });
+  context.window.testShowUnlock();
+  await tick();
+  assert.match(nodes['pay-btns'].inserted, /data-currency="CNY"/,
+    'a WeChat entry must ask for a CNY transaction');
+});
+
+test('clicking the WeChat entry asks the backend for CNY', async () => {
+  const { context, nodes, listeners, calls, bodies } = load({
+    prefs: signedIn, payMethods: wechatMethods, checkout: PADDLE_CREATED,
+  });
+  context.window.testShowUnlock();
+  await tick();
+  context.window.Paddle = { Environment: { set() {} }, Initialize() {}, Checkout: { open() {} } };
+  calls.length = 0; bodies.length = 0;
+  clickPay(listeners, { 'data-provider': 'paddle', 'data-currency': 'CNY' });
+  await tick();
+  const i = calls.findIndex((c) => /\/api\/paddle\/checkout$/.test(c));
+  assert.ok(i >= 0, 'the Paddle checkout endpoint must be called');
+  assert.match(bodies[i], /"currency":"CNY"/, 'the request must name the currency');
+});
+
+test('no WeChat entry when the backend does not list a WeChat currency', async () => {
+  const plain = Object.assign({}, wechatMethods, { paddle_wechat_currencies: [] });
+  const { context, nodes } = load({ prefs: signedIn, payMethods: plain });
+  context.window.testShowUnlock();
+  await tick();
+  assert.equal(/data-currency=/.test(nodes['pay-btns'].inserted), false,
+    'never promise WeChat that cannot be delivered');
+});

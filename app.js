@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
-        '<p class="fineprint">build v66 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v67 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1226,12 +1226,14 @@
       .then(function (j) { payCache = j || {}; cb(payCache); })
       .catch(function () { cb(null); });
   }
-  function doCheckout(provider) {
+  function doCheckout(provider, currency) {
     if (!apiRoot() || !prefs.token) { showUnlock(); return; }
     var isPaddle = provider === "paddle";
     toast(t("pay.creating"));
     fetch(apiRoot() + (isPaddle ? "/api/paddle/checkout" : "/api/checkout"), {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token }, body: "{}"
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token },
+      // currency 只给 Paddle 用：买家自己点"微信支付"时点名要人民币，不能拿 IP 猜他的国家
+      body: JSON.stringify(isPaddle && currency ? { currency: currency } : {})
     })
       .then(function (r) { return r.json(); })
       .then(function (j) {
@@ -1366,6 +1368,12 @@
       var btns = "";
       if (prov.stripe) btns += '<button class="btn primary" data-act="pay" data-provider="stripe">' + esc(t("pay.stripe")) + '</button>';
       if (prov.paddle) btns += '<button class="btn primary" data-act="pay" data-provider="paddle">' + esc(t("pay.paddle")) + '</button>';
+      /* Paddle 只在交易币种是 CNY/USD 且结账页国家选中国时才出微信，而 IP 判断不了人（挂欧洲 VPN 的中国人）。
+         所以给一个明确入口：点它就直接开一笔人民币的单。后端没列出可用币种时这个按钮不出现，不空口许诺。 */
+      var wxc = (info && info.paddle_wechat_currencies) || [];
+      if (prov.paddle && wxc.indexOf("CNY") >= 0) {
+        btns += '<button class="btn primary" data-act="pay" data-provider="paddle" data-currency="CNY">' + esc(t("pay.wechat")) + '</button>';
+      }
       var note = document.querySelector('[data-role="pay-note"]');
       if (btns) {
         box.insertAdjacentHTML("afterbegin", btns);
@@ -1507,7 +1515,7 @@
     if (act === "reset") { if (confirm(t("settings.resetConfirm"))) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; saveState(); toast(t("settings.resetDone")); route(); } return; }
     if (act === "ai-save") { var base = val("ai-base"), key = val("ai-key"), model = "auto"; localStorage.setItem("dtt.ai", JSON.stringify({ base: base, key: key, model: model })); var s2 = document.querySelector('[data-role="ai-status"]'); if (s2) s2.textContent = window.AI.hasLLM() ? t("ai.llmBadge") : t("ai.offlineBadge"); toast(t("settings.aiSaved")); return; }
     if (act === "ai-clear") { localStorage.removeItem("dtt.ai"); document.getElementById("view").innerHTML = vSettings(); toast(t("settings.aiClear")); return; }
-    if (act === "pay") { doCheckout(el.getAttribute("data-provider")); return; }
+    if (act === "pay") { doCheckout(el.getAttribute("data-provider"), el.getAttribute("data-currency")); return; }
     if (act === "buy" || act === "unlock-open") { showUnlock(); return; }   // the dialog lists every live provider
     if (act === "login-open") { showAuth("login"); return; }
     if (act === "register-open") { showAuth("register"); return; }
