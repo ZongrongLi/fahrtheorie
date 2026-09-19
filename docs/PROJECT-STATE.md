@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v71**.
+Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v72**.
 
 ## Where things live
 
@@ -29,6 +29,7 @@ Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v71**.
 | v69 | `26d5c55` + `faa4ffc` | Refund and withdrawal policy removed on the owner's instruction, with its links, terms section, dialog notice and both i18n keys |
 | v70 | `d6f2c32` | After a Paddle checkout completes or closes, the client re-reads `/api/me` for up to 30s so a paid account updates without a manual refresh |
 | v71 | `146984b` | The checkout opens with the account email prefilled, and the WeChat entry pins the country to China, so the buyer lands straight on the payment step |
+| v72 | `5702f67` | Button count follows Stripe's real PayPal capability: while it is off, Paddle stays as the only PayPal route; once on, the Stripe label gains PayPal and the Paddle entry drops out |
 
 Why this was needed: Paddle's `transaction.checkout.url` means "open the checkout on this page"
 and requires Paddle.js - it is not a post-payment redirect like Stripe's session URL. Verified
@@ -152,6 +153,28 @@ postcode field at all, so the remaining fields on a first purchase are email plu
 The ordinary Paddle entry deliberately does **not** force a country - a German buyer stays on their
 geolocated country and keeps PayPal and card.
 
+## v72: the button list is now driven by what the providers can actually do
+
+PayPal cannot be merged into the WeChat button. Paddle builds its method list from the checkout's
+country and currency, and those two sets are mutually exclusive - measured with both USD and CNY
+priced transactions at country = China: **WeChat Pay plus card only, PayPal is not offered at all**.
+One checkout carries one country, so one button can only ever offer one of the two.
+
+Stripe was checked too: its test-mode checkout offers card / Klarna / Bancontact / MB WAY and
+**no PayPal**, and `GET /v1/account` on this account shows no `paypal_payments` capability at all
+(`charges_enabled:false` - the account is not activated). So deleting the Paddle button today would
+have removed PayPal from the site entirely.
+
+`/api/pay-methods` now reports `stripe_paypal`, read from the Stripe account capability and cached
+10 minutes, with a `STRIPE_PAYPAL = on|off` override in `wrangler.toml` in case Stripe renames the
+field. The chooser reacts to it: PayPal is named on the Stripe button only when Stripe can deliver
+it, and the Paddle "local methods" button disappears by itself once that is true. The WeChat entry
+stays either way because Stripe cannot offer WeChat.
+
+Verified live by temporarily forcing the flag on: the dialog collapsed to exactly two buttons -
+"银行卡 / Apple Pay / PayPal (Stripe)" and "微信支付 (中国, ¥ 人民币)" - then the override was removed
+and the endpoint is back to real detection (`stripe_paypal: false`).
+
 ## Current payment state
 
 | Provider | State |
@@ -166,10 +189,10 @@ default-payment-link step.
 
 ## Verification evidence
 
-- Front end: `node tests/startup.test.cjs` 31, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **48 passed, 0 failed**
+- Front end: `node tests/startup.test.cjs` 33, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **51 passed, 0 failed**
 - v69 verified live: `refunds.html` returns 404 and zero refund words remain in `index.html`, `app.js`,
   `i18n.js`, `privacy.html`, `terms.html`; all five files md5-match local
-- Backend: `dtt-backend` `node test.mjs` -> **85 passed, 0 failed** (was 53 before this work)
+- Backend: `dtt-backend` `node test.mjs` -> **89 passed, 0 failed** (was 53 before this work)
 - Real sandbox payment on the live site: transaction `txn_01m2v6755skgkrrxnnzvwh3nb2`,
   status `completed`, EUR 5.00, `custom_data.uid` preserved end to end;
   `POST /api/paddle/verify` with that id returned `{"ok":true,"unlimited":true,"provider":"paddle"}`,
