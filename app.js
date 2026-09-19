@@ -340,7 +340,7 @@
                 : '<button class="btn primary small" data-act="register-open">' + esc(t("ai.freeTen")) + '</button><button class="btn ghost small" data-act="unlock-open">' + esc(t("support.pro")) + '</button>')) +
         '</div>' +
         '<p class="fineprint">' + esc(t("ai.freeAllNote")) + '</p>' +
-        '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
+        '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
         '<p class="fineprint">fahrtheorie.homes</p>' +
       '</div></section>';
   }
@@ -1049,8 +1049,8 @@
         '<label class="btn ghost small">' + ic("up") + esc(t("settings.import")) + '<input type="file" accept="application/json" data-role="import" hidden></label>' +
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
-        '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</a> · <a href="refunds.html">' + esc(t("legal.refunds")) + '</a></p>' +
-        '<p class="fineprint">build v68 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
+        '<p class="fineprint">build v69 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1342,8 +1342,6 @@
         '<span class="muted" data-role="pay-loading">' + esc(t("pay.checking")) + '</span>' +
       '</div>' +
       '<p class="fineprint" data-role="pay-note"></p>' +
-      '<p class="fineprint">' + esc(t("ai.refundNote")) +
-        ' <a href="refunds.html" target="_blank" rel="noopener">' + esc(t("legal.refunds")) + '</a></p>' +
       '<div class="q-actions center" style="margin-top:14px"><button class="btn ghost small" data-act="close-modal">' + esc(t("common.close")) + '</button></div>' +
     '</div>';
     document.body.appendChild(m);

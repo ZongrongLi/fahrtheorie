@@ -10,7 +10,7 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const exists = f => fs.existsSync(path.join(ROOT, f));
 
 const LANGS = ['zh', 'en', 'de', 'ru', 'tr', 'uk', 'pl', 'ro', 'vi', 'ar'];
-const LEGAL_PAGES = ['privacy.html', 'terms.html', 'refunds.html'];
+const LEGAL_PAGES = ['privacy.html', 'terms.html'];
 
 function packs() {
   const saved = global.window;
@@ -36,13 +36,20 @@ test('all 10 UI packs expose the same key set and no empty strings', () => {
   }
 });
 
-test('refund policy strings exist in every pack', () => {
+/* The refund promise was removed on the owner's instruction: there is no refund endpoint and no
+   way to revoke an unlock after a refund, so "always refundable" was an unfunded promise.
+   This guard keeps it from creeping back through a translation or a stray link. */
+test('no refund promise survives anywhere', () => {
+  assert.equal(exists('refunds.html'), false, 'refunds.html must stay deleted');
+  for (const f of ['index.html', 'app.js', 'privacy.html', 'terms.html', 'README.md']) {
+    assert.equal(read(f).includes('refunds.html'), false, `${f} must not link the refund page`);
+  }
   const I = packs();
   for (const lang of LANGS) {
-    assert.ok(I[lang]['legal.refunds'], `${lang} lacks legal.refunds`);
-    assert.ok(I[lang]['ai.refundNote'], `${lang} lacks ai.refundNote`);
-    assert.notEqual(I[lang]['legal.terms'], I[lang]['legal.refunds'],
-      `${lang}: terms and refunds labels must not read the same`);
+    assert.equal(I[lang]['legal.refunds'], undefined, `${lang} must not carry legal.refunds`);
+    assert.equal(I[lang]['ai.refundNote'], undefined, `${lang} must not carry ai.refundNote`);
+    const offenders = Object.keys(I[lang]).filter(k => /退款|撤回|refund|Widerruf|erstatt/i.test(I[lang][k]));
+    assert.deepEqual(offenders, [], `${lang} still promises refunds in: ${offenders}`);
   }
 });
 
@@ -78,14 +85,13 @@ test('rail footer labels are localised and keep their placeholders', () => {
   assert.ok(/CATALOGUE_DATE = "2025-04-01"/.test(app), 'catalogue date constant must be kept');
 });
 
-test('the unlock dialog states the withdrawal terms before payment', () => {
+test('the unlock dialog makes no refund promise', () => {
   const app = read('app.js');
   const dialog = app.slice(app.indexOf('function showUnlock'), app.indexOf('function showUnlock') + 2600);
-  assert.ok(dialog.includes('t("ai.refundNote")'), 'unlock dialog must show the refund note');
-  assert.ok(dialog.includes('href="refunds.html"'), 'unlock dialog must link the refund page');
+  assert.equal(/refund|退款|撤回|refundNote/i.test(dialog), false, 'the dialog must not promise refunds');
 });
 
-test('every legal page exists, cross-links the other two and points home', () => {
+test('every legal page exists, cross-links the other one and points home', () => {
   for (const page of LEGAL_PAGES) assert.ok(exists(page), `${page} missing`);
   for (const page of LEGAL_PAGES) {
     const html = read(page);
@@ -97,15 +103,13 @@ test('every legal page exists, cross-links the other two and points home', () =>
   }
 });
 
-test('the refund page covers the withdrawal window in zh, en and de', () => {
-  const html = read('refunds.html');
-  assert.ok(html.includes('14 天'), 'Chinese 14-day window');
-  assert.ok(html.includes('14 days'), 'English 14-day window');
-  assert.ok(html.includes('Widerruf'), 'German withdrawal wording');
-  assert.ok(html.includes('数字内容') && html.includes('digital content'), 'immediate-delivery clause');
+test('the terms page keeps its sections numbered after the refund section was dropped', () => {
+  const html = read('terms.html');
+  const nums = [...html.matchAll(/<h2>(\d+)\./g)].map(m => Number(m[1]));
+  assert.deepEqual(nums, [1, 2, 3, 4, 5], `terms sections must run 1..5 without gaps: ${nums}`);
 });
 
-test('rail footer and About page link all three legal pages', () => {
+test('rail footer and About page link both legal pages', () => {
   const index = read('index.html');
   const foot = index.slice(index.indexOf('rail-foot'), index.indexOf('</nav>'));
   for (const page of LEGAL_PAGES) {

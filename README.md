@@ -127,7 +127,6 @@ i18n.js               界面文案（10 个语言包：zh/en/de/ru/tr/uk/pl/ro/v
 ai.js                 AI 双引擎（离线讲解 + 可选大模型）
 privacy.html          隐私政策（中/英）
 terms.html            服务条款（中/英，含退款摘要）
-refunds.html          退款与撤回政策（中/英/德三语，Paddle 审核要的独立页）
 favicon.svg|png|ico   站点图标；apple-touch-icon.png 给 iOS
 data/questions.js     题库数据
 data/zh.js            中文译文 + 中文主语
