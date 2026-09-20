@@ -179,7 +179,7 @@ and the endpoint is back to real detection (`stripe_paypal: false`).
 
 | Provider | State |
 |---|---|
-| Stripe | **LIVE** since 2026-09-20: `STRIPE_SECRET_KEY` is the `sk_live_` key and `/api/checkout` returns `cs_live_` sessions. Live webhook `we_1UHg4lLq2GeVvCtZnhPHYlIY` is installed as `STRIPE_WEBHOOK_SECRET` (verified 400 / 400 / 200 against the running worker). The test-card unlock hole is closed. **This account has no `paypal_payments` capability** - it is absent from both the API and the dashboard's 16 active capabilities - so PayPal still only exists on the Paddle button |
+| Stripe | **LIVE** since 2026-09-20: `STRIPE_SECRET_KEY` is the `sk_live_` key and `/api/checkout` returns `cs_live_` sessions. Live webhook `we_1UHg4lLq2GeVvCtZnhPHYlIY` is installed as `STRIPE_WEBHOOK_SECRET` (verified 400 / 400 / 200 against the running worker). The test-card unlock hole is closed. PayPal is **not yet activated**: it needs a separate PayPal merchant approval that Stripe starts from the dashboard, and until it is approved it never appears in `GET /v1/account` capabilities - so an absent capability there is not evidence that it cannot be enabled (I drew that wrong conclusion once on 2026-09-20). Until PayPal is live, the Paddle button remains its only route |
 | Paddle | **sandbox** (`PADDLE_ENV=sandbox`, `test_` client token, webhook secret installed and delivering); live account not started |
 
 Stripe is real money now. Paddle is still sandbox (`PADDLE_ENV=sandbox`, `test_` client token), so its
