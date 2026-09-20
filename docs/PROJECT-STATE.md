@@ -208,7 +208,24 @@ never a window where live payments could arrive with nothing to verify them:
    the dialog to two buttons with no front-end release (33/33 startup tests cover exactly this case).
    WeChat Pay on Stripe is still "pending approval" (`wechat_pay: available:false + display on`) -
    whether to wire it in once approved is a separate decision (Stripe WeChat needs CNY, not just a button).
-2. **Payout bank decision (2026-09-20 evening): keep Stripe as is.** The dashboard's money-management
+3. **Four capability-gated Stripe buttons (2026-09-20 night, build v73, commit `70db465`).** The owner
+   asked for four Stripe buttons - WeChat, Alipay, PayPal, card - and to drop Paddle. Live API evidence said
+   only two can exist today: forcing `payment_method_types[0]=alipay` (EUR and CNY) or `=wechat_pay`
+   (EUR/CNY, with and without `payment_method_options[wechat_pay][client]=web`) is rejected with
+   "the payment method type provided is invalid ... ensure it is activated in your dashboard", because both
+   are still pending approval (`available:false + display on`); forcing `=card` / `=paypal` succeeds.
+   So the dialog is gated, not hard-coded: `/api/pay-methods` now returns a `stripe_methods` map
+   (`card/paypal/alipay/wechat_pay`, from the default payment method configuration, cached 10 min),
+   each unlock-dialog button carries its own `method`, and `/api/checkout` accepts `{method}` and answers
+   400 for anything not approved instead of letting Stripe scare the buyer. Approved methods appear on
+   their own with no further release. Paddle WeChat stays as a fallback entry ONLY while
+   `stripe_methods.wechat_pay` is false and disappears the moment Stripe approves WeChat; the generic
+   Paddle button is already gone (Stripe covers PayPal). New i18n keys `pay.sCard/sPaypal/sAlipay/sWechat`
+   in all 10 packs; backend tests 102, frontend 54 (startup 35 / legal 13 / ai-lang 6). Worker deployed
+   (`99dd29a5`), live `/api/pay-methods` returns
+   `stripe_methods:{"card":true,"paypal":true,"alipay":false,"wechat_pay":false}`; live site is build v73
+   (5 front-end files md5-identical, `styles.css` unchanged), KV still the 8-key baseline via `--remote`.
+4. **Payout bank decision (2026-09-20 evening): keep Stripe as is.** The dashboard's money-management
    page shows the payout account is Revolut ending 7724 (EUR, default) - found at
    Settings -> "Linked accounts and payouts" -> `/settings/money-management` (the older guesses
    `/settings/payouts`, `/settings/account`, `/account_details` all bounce or miss). The owner decided:
@@ -288,9 +305,11 @@ that API expansion is not a reliable "no bank configured" signal.
 
 ## Open items
 
-0. Stripe: get PayPal approved in the dashboard, and settle the payout bank (C24 or keep the current
-   one). Both are dashboard actions for the owner, not code. Then confirm the chooser really collapsed
-   to two buttons - v72 should do it on its own.
+0. ~~Stripe: get PayPal approved in the dashboard, and settle the payout bank~~ **done 2026-09-20** -
+   PayPal approved by the owner, payout bank stays Revolut 7724, C24 reserved for Paddle live. The v73
+   dialog is capability-gated: card + PayPal via Stripe plus the Paddle WeChat fallback today; the Stripe
+   Alipay/WeChat buttons appear on their own once Stripe approves them. Nothing left to click - the two
+   rows read pending approval on Stripe's side.
 
 1. ~~Stripe live key + live webhook (blocked on account activation)~~ **done 2026-09-20** - see the section above.
 2. Paddle live account, live price, live client-side token, then flip `PADDLE_ENV` and redeploy. Owner said next round.
