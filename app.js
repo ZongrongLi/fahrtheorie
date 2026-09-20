@@ -67,6 +67,7 @@
     if (!prefs[k] && OWNER[k]) prefs[k] = OWNER[k];
   });
   window.__explLang = prefs.explLang;
+  window.__explManual = false;   // per-question/settings override of the explanation language (session only)
   var session = null, aiPanelOpen = {}, aiHist = {}, lastHash = "#/home";
   function navFromHash(h) {
     var v = String(h || "").replace(/^#\/?/, "").split(/[/?]/)[0];
@@ -787,8 +788,14 @@
     if (lang === "de") return q.cd || "";
     return q.ce || "";
   }
+  /* Official explanation follows the QUIZ language: a single-language quiz always explains in that
+     language (unless the reader just overrode it via the switch/settings this session). The stored
+     explLang only governs bilingual mode. */
   function explEffective(q) {
     var a = explAvail(q);
+    if (window.__explManual && a.indexOf(prefs.explLang) >= 0) return prefs.explLang;
+    var l = contentLangs();
+    if (l.length === 1 && explText(q, l[0])) return l[0];
     return a.indexOf(prefs.explLang) >= 0 ? prefs.explLang : (a[0] || "en");
   }
   function explSwitch(q) {
@@ -1050,7 +1057,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v76 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v77 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1501,13 +1508,13 @@
   /* ---------------- events ---------------- */
   document.addEventListener("click", function (e) {
     var segBtn = e.target.closest("[data-seg] .seg-btn");
-    if (segBtn) { var name = segBtn.closest("[data-seg]").getAttribute("data-seg"); var key = name === "uilang" ? "uiLang" : name === "contentlang" ? "contentLang" : name === "expllang" ? "explLang" : name === "scope" ? "scope" : "theme"; prefs[key] = segBtn.getAttribute("data-val"); if (key === "explLang") window.__explLang = prefs.explLang; savePrefs(); applyTheme(); buildIndex(); if (key === "scope") { applyScope(); route(); } else { document.getElementById("view").innerHTML = vSettings(); } return; }
+    if (segBtn) { var name = segBtn.closest("[data-seg]").getAttribute("data-seg"); var key = name === "uilang" ? "uiLang" : name === "contentlang" ? "contentLang" : name === "expllang" ? "explLang" : name === "scope" ? "scope" : "theme"; prefs[key] = segBtn.getAttribute("data-val"); if (key === "explLang") { window.__explLang = prefs.explLang; window.__explManual = true; } if (key === "contentLang") window.__explManual = false; savePrefs(); applyTheme(); buildIndex(); if (key === "scope") { applyScope(); route(); } else { document.getElementById("view").innerHTML = vSettings(); } return; }
 
     var el = e.target.closest("[data-act]:not(select)"); if (!el) return;
     var act = el.getAttribute("data-act");
     if (act === "ui-lang") { prefs.uiLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; refresh(); return; }
     if (act === "content-lang") { prefs.contentLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; refresh(); return; }
-    if (act === "expl-lang") { prefs.explLang = el.getAttribute("data-val"); window.__explLang = prefs.explLang; savePrefs(); aiHist = {}; refresh(); return; }
+    if (act === "expl-lang") { prefs.explLang = el.getAttribute("data-val"); window.__explLang = prefs.explLang; window.__explManual = true; savePrefs(); aiHist = {}; refresh(); return; }
     if (act === "toggle-theme") { prefs.theme = prefs.theme === "dark" ? "light" : "dark"; savePrefs(); applyTheme(); renderTopbar(); return; }
     if (act === "opt") return onOpt(parseInt(el.getAttribute("data-i"), 10));
     if (act === "submit") return submitCurrent();
@@ -1604,6 +1611,7 @@
       var kind = e.target.getAttribute("data-lang");
       prefs[kind === "ui" ? "uiLang" : "contentLang"] = e.target.value;
       if (!langKnown(prefs.uiLang)) prefs.uiLang = "zh";
+      if (kind !== "ui") window.__explManual = false;
       savePrefs(); aiHist = {}; applyTheme(); buildIndex();
       toast(kind === "ui" ? langPickerName(prefs.uiLang) : t("lang." + prefs.contentLang));
       refresh();

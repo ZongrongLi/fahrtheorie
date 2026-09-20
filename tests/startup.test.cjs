@@ -11,7 +11,7 @@ const marker = '  window.__boot = boot;';
 assert.equal(appSource.split(marker).length, 2, 'boot marker must be unique');
 const instrumented = appSource.replace(marker,
   '  window.testPrefs = prefs;\n  window.testShowUnlock = showUnlock;\n' +
-  '  window.testHandlePaidReturn = handlePaidReturn;\n  window.testDoCheckout = doCheckout;\n  window.testRefreshQuota = refreshQuota;\n  window.testPaddleEvent = paddleEvent;\n' + marker);
+  '  window.testHandlePaidReturn = handlePaidReturn;\n  window.testDoCheckout = doCheckout;\n  window.testRefreshQuota = refreshQuota;\n  window.testPaddleEvent = paddleEvent;\n  window.testExplEffective = explEffective;\n' + marker);
 
 function stubNode() {
   return {
@@ -542,4 +542,47 @@ test('a Stripe-only backend still gets the button and a Paddle-only backend does
   await tick();
   assert.equal(/data-act="pay"/.test(b.nodes['pay-btns'].inserted), false,
     'without Stripe there is nothing to pay with, so no button is promised');
+});
+
+/* Official explanation follows the QUIZ language (single-language quiz wins; the stored explLang
+   only governs bilingual mode; switch/settings clicks override for the session). */
+const EXPL_Q = {
+  id: '1.1.02-001', th: '1.1', ch: '1.1.02',
+  qe: 'What must you expect?', qd: 'Womit muessen Sie rechnen?',
+  ce: 'Because pedestrians may cross the road.', cd: 'Weil Fussgaenger die Fahrbahn queren koennen.',
+};
+const EXPL_ZH = { '1.1.02-001': { q: '中文题干', o: ['中文选项'], c: '中文解释' } };
+
+test('official explanation follows a single quiz language, not the stored default', () => {
+  const { context } = load({ prefs: { contentLang: 'en', explLang: 'zh' } });
+  context.window.__ZH = EXPL_ZH;
+  assert.equal(context.window.testExplEffective(EXPL_Q), 'en');
+});
+
+test('official explanation follows a German quiz', () => {
+  const { context } = load({ prefs: { contentLang: 'de', explLang: 'zh' } });
+  context.window.__ZH = EXPL_ZH;
+  assert.equal(context.window.testExplEffective(EXPL_Q), 'de');
+});
+
+test('bilingual quiz keeps the stored explanation preference', () => {
+  const { context } = load({ prefs: { contentLang: 'zhen', explLang: 'zh' } });
+  context.window.__ZH = EXPL_ZH;
+  assert.equal(context.window.testExplEffective(EXPL_Q), 'zh');
+});
+
+test('a manual switch/settings override wins for the session', () => {
+  const { context } = load({ prefs: { contentLang: 'en', explLang: 'de' } });
+  context.window.__ZH = EXPL_ZH;
+  context.window.__explManual = true;
+  assert.equal(context.window.testExplEffective(EXPL_Q), 'de');
+});
+
+test('switching quiz language drops the manual override', () => {
+  assert.ok(appSource.includes('if (kind !== "ui") window.__explManual = false;'),
+    'the language-dropdown handler must clear the manual explanation override');
+  assert.ok(appSource.includes('if (key === "contentLang") window.__explManual = false;'),
+    'the seg handler must clear the manual explanation override on quiz-language switch');
+  assert.ok(appSource.includes('window.__explManual = true; savePrefs(); aiHist = {}; refresh();'),
+    'the per-question switch must mark a manual override');
 });
