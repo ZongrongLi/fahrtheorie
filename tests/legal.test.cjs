@@ -162,6 +162,32 @@ test('favicon and apple-touch icons are shipped and referenced', () => {
 /* The dialog renders exactly one payment button (data-act="pay" data-provider="stripe") and no
    per-method / per-currency entries: Stripe's checkout lists card + PayPal itself today and adds
    Alipay/WeChat on its own once approved. The note is the plain pay.note - no currency hint. */
+test('the top bar labels both language dropdowns so buyers can tell quiz language from site language', () => {
+  const app = read('app.js');
+  const bar = app.slice(app.indexOf('function renderTopbar'), app.indexOf('function renderTopbar') + 1400);
+  assert.ok(bar.includes('class="langwrap"'), 'each dropdown must carry a visible label wrapper');
+  assert.ok(bar.includes('t("settings.contentLang")'), 'the quiz-language dropdown must show its name');
+  assert.ok(bar.includes('t("settings.uiLang")'), 'the site-language dropdown must show its name');
+});
+
+test('only the rail keeps the coffee button, the home copy is gone', () => {
+  const app = read('app.js');
+  assert.equal(/data-act="support"/.test(app), false, 'no support button may be rendered from app.js');
+  assert.equal(app.includes('support.cta'), false, 'the home coffee label must not be rendered any more');
+  assert.ok(read('index.html').includes('data-act="support"'), 'the rail coffee button stays');
+});
+
+test('the quiz-language label says quiz in every pack', () => {
+  const I = packs();
+  const want = { zh: '刷题语言', en: 'Quiz language', de: 'Übungssprache', ru: 'Язык заданий',
+                 tr: 'Test dili', uk: 'Мова завдань', pl: 'Język quizu', ro: 'Limba chestionarului',
+                 vi: 'Ngôn ngữ làm bài', ar: 'لغة الاختبار' };
+  for (const lang of LANGS) {
+    assert.equal(I[lang]['settings.contentLang'], want[lang], `${lang}: quiz-language label wrong`);
+    assert.ok(I[lang]['settings.langNote'], `${lang} lacks settings.langNote`);
+  }
+});
+
 test('the dialog renders one Stripe button, no Paddle, no method or currency entries', () => {
   const app = read('app.js');
   const dialog = app.slice(app.indexOf('function showUnlock'), app.indexOf('function downscale'));

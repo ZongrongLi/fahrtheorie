@@ -327,11 +327,6 @@
       '</section>' +
       '<section class="block"><div class="note-card">' +
         '<p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
-        (prefs.donateQR
-          ? '<div class="donate"><img class="qr" src="' + prefs.donateQR + '" alt="QR"><div class="donate-txt"><strong>' + esc(t("support.title")) + '</strong>' +
-            (prefs.donateLink ? '<p><a href="' + esc(prefs.donateLink) + '" target="_blank" rel="noopener">' + esc(prefs.donateLink) + '</a></p>' : '') +
-            '<p class="fineprint">' + esc(t("support.scanHint")) + '</p></div></div>'
-          : '<div class="q-actions"><button class="btn ghost small" data-act="support">' + esc(t("support.cta")) + '</button></div>') +
         '<div class="q-actions" style="margin-top:12px">' +
           (aiUnlocked()
             ? '<span class="chip">' + esc(t("ai.unlocked")) + '</span>'
@@ -1050,7 +1045,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v74 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v75 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1694,8 +1689,10 @@
       (aiLoggedIn()
         ? '<span class="chip">' + esc(prefs.user) + '</span><button class="btn ghost small" data-act="logout">' + esc(t("login.logout")) + '</button>'
         : '<button class="btn ghost small" data-act="login-open">' + esc(t("auth.loginBtn")) + '</button><button class="btn primary small auth-reg" data-act="register-open">' + esc(t("auth.registerBtn")) + '</button>') +
-      langPicker("content", t("settings.contentLang"), contentOptions(), prefs.contentLang) +
-      langPicker("ui", t("settings.uiLang"), uiOptions(), prefs.uiLang) +
+      '<span class="langwrap"><span class="langtag">' + esc(t("settings.contentLang")) + '</span>' +
+      langPicker("content", t("settings.contentLang"), contentOptions(), prefs.contentLang) + '</span>' +
+      '<span class="langwrap"><span class="langtag">' + esc(t("settings.uiLang")) + '</span>' +
+      langPicker("ui", t("settings.uiLang"), uiOptions(), prefs.uiLang) + '</span>' +
       '<button class="iconbtn" data-act="toggle-theme" title="' + esc(t("settings.theme")) + '" aria-label="' + esc(t("settings.theme")) + '">' + ic(prefs.theme === "dark" ? "sun" : "moon") + '</button>';
   }
   function refresh() {
