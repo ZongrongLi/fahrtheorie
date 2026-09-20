@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-20 (Europe/Berlin). Live build: **v76**.
+Snapshot date: 2026-09-20 (Europe/Berlin). Live build: **v77**.
 
 ## Where things live
 
@@ -253,6 +253,23 @@ never a window where live payments could arrive with nothing to verify them:
    `stripe_paypal:true`, unauthenticated `/api/checkout` 401s localized live (en/de/zh). Test price stays
    EUR 0.50 (`PRICE_CENTS="50"`); restore `"500"` when testing ends. `privacy.html`/`terms.html` remain
    Chinese-only legal texts (translating them needs legal review, not a code change).
+8. **Official explanation follows the quiz language (2026-09-20 night, build v77, commit `89075dd`).**
+   Single-language quiz (contentLang en/de/...) shows the official explanation in that language when
+   available, ignoring the stored explLang; bilingual mode still honors the stored preference. Tapping the
+   per-question switch or the settings segment marks a session-only manual override (`__explManual`);
+   switching the quiz language clears it. 5 new startup tests pin this (36/36). Live verified: 7/7 files
+   md5 MATCH, rail + About badges read build v77.
+9. **Per-question discussion backend (2026-09-20 night, worker-only, no front-end yet).** New KV-backed
+   routes, no new bindings: `GET /api/comments?qid=` (public, max 200, time-sorted, exposes only
+   id/parent/name/ts/text), `POST /api/comments` {qid, text, parent?} (Bearer login required, 1000-char
+   cap, 20s per-user rate limit via `rl:<uid>` with 60s TTL, reply-to-reply flattens to two levels),
+   `POST /api/admin/comment` {qid, id} (x-admin-token, idempotent delete). Keys `c:<qid>:<cid>`.
+   Backend tests 109 -> **125** (16 new: auth, validation, rate limit, thread flattening, admin delete).
+   Live verified: empty list returns `{comments:[]}`, unauthenticated POST is rejected, KV untouched by
+   probes. Pre-edit snapshot: `~/Documents/Codex/2026-09-17/fahrtheorie/work/backups/2026-09-20-1647-comments-pre/`.
+   Storage estimate: ~500 bytes/comment -> 10 comments x 2413 questions ~= 12 MB, ~1% of the free 1 GB KV
+   quota; reads/writes are nowhere near the free daily limits at current traffic. Front-end UI (thread view,
+   composer, i18n) is still open.
 4. **Payout bank decision (2026-09-20 evening): keep Stripe as is.** The dashboard's money-management
    page shows the payout account is Revolut ending 7724 (EUR, default) - found at
    Settings -> "Linked accounts and payouts" -> `/settings/money-management` (the older guesses
