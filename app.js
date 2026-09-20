@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v72 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v73 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1226,14 +1226,18 @@
       .then(function (j) { payCache = j || {}; cb(payCache); })
       .catch(function () { cb(null); });
   }
-  function doCheckout(provider, currency) {
+  function doCheckout(provider, currency, method) {
     if (!apiRoot() || !prefs.token) { showUnlock(); return; }
     var isPaddle = provider === "paddle";
     toast(t("pay.creating"));
+    // Stripe 四个按钮各带各的 method，后端按 stripe_methods 门控：没开通的直接 400，不许诺付不了的方式。
+    // currency 只给 Paddle 用：买家自己点"微信支付"时点名要人民币，不能拿 IP 猜他的国家。
+    var payload = {};
+    if (isPaddle && currency) payload = { currency: currency };
+    else if (!isPaddle && method) payload = { method: method };
     fetch(apiRoot() + (isPaddle ? "/api/paddle/checkout" : "/api/checkout"), {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token },
-      // currency 只给 Paddle 用：买家自己点"微信支付"时点名要人民币，不能拿 IP 猜他的国家
-      body: JSON.stringify(isPaddle && currency ? { currency: currency } : {})
+      body: JSON.stringify(payload)
     })
       .then(function (r) { return r.json(); })
       .then(function (j) {
@@ -1405,14 +1409,24 @@
       var prov = (info && info.providers) || {};
       var btns = "";
       var paypalReady = info && info.stripe_paypal === true;
-      if (prov.stripe) btns += '<button class="btn primary" data-act="pay" data-provider="stripe">' + esc(t(paypalReady ? "pay.stripePaypal" : "pay.stripe")) + '</button>';
+      /* 四个按钮都走 Stripe，各带各的 method；哪个出现由后端的 stripe_methods 说了算
+         （Stripe 后台"待批准"的方式 API 直接拒单，写出来就是空口许诺）。
+         批下来自动多出按钮，不用再发版。老后端没给 stripe_methods 时退回以前的合并按钮。 */
+      var sm = (info && info.stripe_methods) || null;
+      if (prov.stripe && sm) {
+        if (sm.card) btns += '<button class="btn primary" data-act="pay" data-provider="stripe" data-method="card">' + esc(t("pay.sCard")) + '</button>';
+        if (sm.paypal) btns += '<button class="btn primary" data-act="pay" data-provider="stripe" data-method="paypal">' + esc(t("pay.sPaypal")) + '</button>';
+        if (sm.alipay) btns += '<button class="btn primary" data-act="pay" data-provider="stripe" data-method="alipay">' + esc(t("pay.sAlipay")) + '</button>';
+        if (sm.wechat_pay) btns += '<button class="btn primary" data-act="pay" data-provider="stripe" data-method="wechat_pay">' + esc(t("pay.sWechat")) + '</button>';
+      }
+      else if (prov.stripe) btns += '<button class="btn primary" data-act="pay" data-provider="stripe">' + esc(t(paypalReady ? "pay.stripePaypal" : "pay.stripe")) + '</button>';
       /* Paddle 那个"本地支付"按钮目前是 PayPal 的唯一入口。Stripe 一旦开通 PayPal 它就重复了，
          所以到时候自动收掉；没开通之前不能提前删，也不能提前把 PayPal 写进 Stripe 的文案。 */
-      if (prov.paddle && !paypalReady) btns += '<button class="btn primary" data-act="pay" data-provider="paddle">' + esc(t("pay.paddle")) + '</button>';
+      if (prov.paddle && !paypalReady && !sm) btns += '<button class="btn primary" data-act="pay" data-provider="paddle">' + esc(t("pay.paddle")) + '</button>';
       /* Paddle 只在交易币种是 CNY/USD 且结账页国家选中国时才出微信，而 IP 判断不了人（挂欧洲 VPN 的中国人）。
          所以给一个明确入口：点它就直接开一笔人民币的单。后端没列出可用币种时这个按钮不出现，不空口许诺。 */
       var wxc = (info && info.paddle_wechat_currencies) || [];
-      if (prov.paddle && wxc.indexOf("CNY") >= 0) {
+      if (prov.paddle && wxc.indexOf("CNY") >= 0 && !(sm && sm.wechat_pay)) {
         btns += '<button class="btn primary" data-act="pay" data-provider="paddle" data-currency="CNY">' + esc(t("pay.wechat")) + '</button>';
       }
       var note = document.querySelector('[data-role="pay-note"]');
@@ -1556,7 +1570,7 @@
     if (act === "reset") { if (confirm(t("settings.resetConfirm"))) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; saveState(); toast(t("settings.resetDone")); route(); } return; }
     if (act === "ai-save") { var base = val("ai-base"), key = val("ai-key"), model = "auto"; localStorage.setItem("dtt.ai", JSON.stringify({ base: base, key: key, model: model })); var s2 = document.querySelector('[data-role="ai-status"]'); if (s2) s2.textContent = window.AI.hasLLM() ? t("ai.llmBadge") : t("ai.offlineBadge"); toast(t("settings.aiSaved")); return; }
     if (act === "ai-clear") { localStorage.removeItem("dtt.ai"); document.getElementById("view").innerHTML = vSettings(); toast(t("settings.aiClear")); return; }
-    if (act === "pay") { doCheckout(el.getAttribute("data-provider"), el.getAttribute("data-currency")); return; }
+    if (act === "pay") { doCheckout(el.getAttribute("data-provider"), el.getAttribute("data-currency"), el.getAttribute("data-method")); return; }
     if (act === "buy" || act === "unlock-open") { showUnlock(); return; }   // the dialog lists every live provider
     if (act === "login-open") { showAuth("login"); return; }
     if (act === "register-open") { showAuth("register"); return; }

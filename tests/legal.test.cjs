@@ -156,17 +156,34 @@ test('favicon and apple-touch icons are shipped and referenced', () => {
 /* The backend picks a settlement currency per visitor so that WeChat Pay can appear at all
    (Paddle requires CNY/USD, not just a Chinese address). The dialog promises that currency, so the
    placeholder must survive in every pack — a translation that drops {c} silently prints "{c}". */
-/* pay.stripePaypal is only shown when Stripe reports the PayPal capability, so it must name
-   PayPal (that is the whole reason it exists) and must not reach for WeChat, which Stripe cannot do. */
-test('the Stripe PayPal label names PayPal and nothing it cannot deliver', () => {
+/* The four single-method Stripe buttons (pay.sCard/sPaypal/sAlipay/sWechat) are each shown only
+   when the backend's stripe_methods map says Stripe approved that method, so each label only has to
+   name its own method and Stripe - the gating (not the wording) is what keeps unapproved methods out.
+   The legacy combined pay.stripePaypal label stays for old backends and must still name PayPal. */
+test('each single-method Stripe label names exactly the method it can deliver', () => {
   const I = packs();
+  const need = { 'pay.sCard': /card|银行卡|karte|kart|карта|картка|karta|thẻ|البطاقة/i,
+                 'pay.sPaypal': /paypal/i, 'pay.sAlipay': /alipay|支付宝/i,
+                 'pay.sWechat': /wechat|微信/i };
   for (const lang of LANGS) {
-    const label = I[lang]['pay.stripePaypal'];
-    assert.ok(label, `${lang} lacks pay.stripePaypal`);
-    assert.match(label, /paypal/i, `${lang}: the label must name PayPal`);
-    assert.equal(/wechat|微信/i.test(label), false, `${lang}: Stripe cannot offer WeChat Pay`);
-    assert.notEqual(label, I[lang]['pay.stripe'], `${lang}: the two Stripe labels must differ`);
+    for (const [key, re] of Object.entries(need)) {
+      const label = I[lang][key];
+      assert.ok(label, `${lang} lacks ${key}`);
+      assert.match(label, re, `${lang}: ${key} must name its method`);
+      assert.match(label, /stripe/i, `${lang}: ${key} must say it goes through Stripe`);
+    }
+    const legacy = I[lang]['pay.stripePaypal'];
+    assert.match(legacy, /paypal/i, `${lang}: the legacy label must name PayPal`);
+    assert.equal(/wechat|微信/i.test(legacy), false, `${lang}: the legacy combined label must not promise WeChat`);
   }
+});
+
+test('the dialog gates every Stripe button on the backend capability map', () => {
+  const app = read('app.js');
+  for (const m of ['sm.card', 'sm.paypal', 'sm.alipay', 'sm.wechat_pay'])
+    assert.ok(app.includes(m), `showUnlock must gate on ${m}`);
+  assert.ok(app.includes('data-method="wechat_pay"'), 'the WeChat button must carry its method');
+  assert.ok(app.includes('!(sm && sm.wechat_pay)'), 'the Paddle WeChat fallback must yield once Stripe approves WeChat');
 });
 
 test('the local-currency note keeps its placeholder in every language', () => {
