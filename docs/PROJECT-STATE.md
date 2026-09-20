@@ -193,20 +193,21 @@ never a window where live payments could arrive with nothing to verify them:
 
 ### Two things still open on Stripe, and neither is code
 
-1. **PayPal is connected, provisioning pending (2026-09-20 evening).** The owner enabled PayPal at
+1. **PayPal is LIVE (2026-09-20 night).** The owner enabled PayPal at
    Settings -> Payments -> payment methods (true URL: `/settings/payment_methods` with underscore;
    the hyphenated `/settings/payment-methods` bounces to `/dashboard`), chose
    "settle PayPal income to the Stripe balance (recommended)" so payouts keep flowing to the existing
    bank, clicked through "Connect to PayPal", and completed the PayPal-side account linking himself
-   (agent never touches PayPal credentials). Dashboard now reads PayPal enabled (16 enabled / 20 disabled,
-   was 15 / 21). BUT `GET /v1/account` still lists no `paypal_payments` capability at all - full key list
-   re-checked twice, ~40 minutes apart - so `/api/pay-methods` still returns `stripe_paypal:false` and the
-   site still shows three buttons. No code change needed: the v72 gate flips by itself once the API reports
-   the capability (worker cache is 10 minutes). If it is still absent after ~24h, check the dashboard for a
-   follow-up step or a PayPal-side pending approval before touching code.
-   The front end is already capability-gated (v72): the moment `stripe_paypal` turns true the Stripe
-   button gains PayPal and the Paddle button disappears, with no release. Until then the Paddle button
-   is PayPal's only route and must stay.
+   (agent never touches PayPal credentials). Dashboard reads PayPal enabled (16 enabled / 20 disabled).
+   Correction worth keeping: `GET /v1/account` capabilities NEVER listed `paypal_payments` - not even after
+   activation - because the dashboard actually reads/writes
+   `GET /v1/payment_method_configurations` (default config `pmc_1UGhdcLq2GeVvCtZ2jnCkFdD`), where PayPal is
+   `available:true + display on`. The backend probe was switched to that endpoint (`stripeHasPaypal`
+   requires available AND display on; `STRIPE_PAYPAL=on/off` override kept), backend tests 89 -> **92**,
+   deployed, and live `/api/pay-methods` now returns `stripe_paypal:true`. The v72 gate therefore collapses
+   the dialog to two buttons with no front-end release (33/33 startup tests cover exactly this case).
+   WeChat Pay on Stripe is still "pending approval" (`wechat_pay: available:false + display on`) -
+   whether to wire it in once approved is a separate decision (Stripe WeChat needs CNY, not just a button).
 2. **Payout bank decision (2026-09-20 evening): keep Stripe as is.** The dashboard's money-management
    page shows the payout account is Revolut ending 7724 (EUR, default) - found at
    Settings -> "Linked accounts and payouts" -> `/settings/money-management` (the older guesses
@@ -233,7 +234,7 @@ burned a lot of turns guessing selectors and then drew the wrong PayPal conclusi
 
 | Provider | State |
 |---|---|
-| Stripe | **LIVE** since 2026-09-20: `STRIPE_SECRET_KEY` is the `sk_live_` key and `/api/checkout` returns `cs_live_` sessions. Live webhook `we_1UHg4lLq2GeVvCtZnhPHYlIY` is installed as `STRIPE_WEBHOOK_SECRET`. Re-verified against the running worker on 2026-09-20, all four states: missing `Stripe-Signature` -> 400, forged `v1` -> 400, correctly HMAC-signed + fresh `ts` -> `{"ok":true}` 200, correctly signed + `ts` 10000s old -> `{"error":"stale"}` 400. The self-test event referenced a non-existent session and a non-existent uid, and KV still holds exactly 8 keys afterwards, so it unlocked nothing. The test-card unlock hole is closed. PayPal is **connected but still provisioning**: dashboard reads enabled since 2026-09-20 evening, yet `GET /v1/account` still has no `paypal_payments` capability, so `stripe_paypal` is still false. The v72 gate flips with no release once the API catches up. Until then, the Paddle button remains PayPal's only route |
+| Stripe | **LIVE** since 2026-09-20: `STRIPE_SECRET_KEY` is the `sk_live_` key and `/api/checkout` returns `cs_live_` sessions. Live webhook `we_1UHg4lLq2GeVvCtZnhPHYlIY` is installed as `STRIPE_WEBHOOK_SECRET`. Re-verified against the running worker on 2026-09-20, all four states: missing `Stripe-Signature` -> 400, forged `v1` -> 400, correctly HMAC-signed + fresh `ts` -> `{"ok":true}` 200, correctly signed + `ts` 10000s old -> `{"error":"stale"}` 400. The self-test event referenced a non-existent session and a non-existent uid, and KV still holds exactly 8 keys afterwards, so it unlocked nothing. The test-card unlock hole is closed. PayPal is **live since 2026-09-20 night**: dashboard enabled, `payment_method_configurations` reports `available:true + display on`, live `/api/pay-methods` returns `stripe_paypal:true`, so the unlock dialog is down to two buttons (Stripe card/PayPal + WeChat) with no front-end release. Backend tests 92/92, front-end 51/51 |
 | Paddle | **sandbox** (`PADDLE_ENV=sandbox`, `test_` client token, webhook secret installed and delivering); live account not started |
 
 Stripe is real money now. Paddle is still sandbox (`PADDLE_ENV=sandbox`, `test_` client token), so its
