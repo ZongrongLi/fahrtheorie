@@ -193,20 +193,25 @@ never a window where live payments could arrive with nothing to verify them:
 
 ### Two things still open on Stripe, and neither is code
 
-1. **PayPal is not activated.** It needs a PayPal merchant approval that Stripe starts from
-   Settings -> Payments (`/settings/checkout`) -> payment methods. Until it is approved, it does not
-   appear in `GET /v1/account` capabilities at all - so an absent capability is **not** evidence that
-   PayPal cannot be enabled. I asserted exactly that on 2026-09-20 and was corrected by the owner
-   pointing at the dashboard; the fix is recorded below so it does not repeat.
+1. **PayPal is connected, provisioning pending (2026-09-20 evening).** The owner enabled PayPal at
+   Settings -> Payments -> payment methods (true URL: `/settings/payment_methods` with underscore;
+   the hyphenated `/settings/payment-methods` bounces to `/dashboard`), chose
+   "settle PayPal income to the Stripe balance (recommended)" so payouts keep flowing to the existing
+   bank, clicked through "Connect to PayPal", and completed the PayPal-side account linking himself
+   (agent never touches PayPal credentials). Dashboard now reads PayPal enabled (16 enabled / 20 disabled,
+   was 15 / 21). BUT `GET /v1/account` still lists no `paypal_payments` capability at all - full key list
+   re-checked twice, ~40 minutes apart - so `/api/pay-methods` still returns `stripe_paypal:false` and the
+   site still shows three buttons. No code change needed: the v72 gate flips by itself once the API reports
+   the capability (worker cache is 10 minutes). If it is still absent after ~24h, check the dashboard for a
+   follow-up step or a PayPal-side pending approval before touching code.
    The front end is already capability-gated (v72): the moment `stripe_paypal` turns true the Stripe
    button gains PayPal and the Paddle button disappears, with no release. Until then the Paddle button
    is PayPal's only route and must stay.
-2. **The payout bank was not switched to C24.** The owner supplied an IBAN (C24 Bank, BLZ 50024024;
-   I verified its mod-97 check digits before touching anything). The live key cannot add or change a
-   bank - `POST /v1/account/external_accounts` returns `more_permissions_required` - and no IBAN field
-   could be found in the dashboard, while Payouts reads as active, so a bank is most likely already in
-   place. Changing a payout account is the kind of action that sends money to the wrong place, so I
-   stopped and asked rather than guessing at the UI.
+2. **Payout bank decision (2026-09-20 evening): keep Stripe as is.** The dashboard's money-management
+   page shows the payout account is Revolut ending 7724 (EUR, default) - found at
+   Settings -> "Linked accounts and payouts" -> `/settings/money-management` (the older guesses
+   `/settings/payouts`, `/settings/account`, `/account_details` all bounce or miss). The owner decided:
+   Stripe keeps this account, no change; the C24 account is reserved for Paddle live later.
 
 ### How I was driving his browser, and why it cost me
 
@@ -228,7 +233,7 @@ burned a lot of turns guessing selectors and then drew the wrong PayPal conclusi
 
 | Provider | State |
 |---|---|
-| Stripe | **LIVE** since 2026-09-20: `STRIPE_SECRET_KEY` is the `sk_live_` key and `/api/checkout` returns `cs_live_` sessions. Live webhook `we_1UHg4lLq2GeVvCtZnhPHYlIY` is installed as `STRIPE_WEBHOOK_SECRET`. Re-verified against the running worker on 2026-09-20, all four states: missing `Stripe-Signature` -> 400, forged `v1` -> 400, correctly HMAC-signed + fresh `ts` -> `{"ok":true}` 200, correctly signed + `ts` 10000s old -> `{"error":"stale"}` 400. The self-test event referenced a non-existent session and a non-existent uid, and KV still holds exactly 8 keys afterwards, so it unlocked nothing. The test-card unlock hole is closed. PayPal is **not yet activated**: it needs a separate PayPal merchant approval that Stripe starts from the dashboard, and until it is approved it never appears in `GET /v1/account` capabilities - so an absent capability there is not evidence that it cannot be enabled (I drew that wrong conclusion once on 2026-09-20). Until PayPal is live, the Paddle button remains its only route |
+| Stripe | **LIVE** since 2026-09-20: `STRIPE_SECRET_KEY` is the `sk_live_` key and `/api/checkout` returns `cs_live_` sessions. Live webhook `we_1UHg4lLq2GeVvCtZnhPHYlIY` is installed as `STRIPE_WEBHOOK_SECRET`. Re-verified against the running worker on 2026-09-20, all four states: missing `Stripe-Signature` -> 400, forged `v1` -> 400, correctly HMAC-signed + fresh `ts` -> `{"ok":true}` 200, correctly signed + `ts` 10000s old -> `{"error":"stale"}` 400. The self-test event referenced a non-existent session and a non-existent uid, and KV still holds exactly 8 keys afterwards, so it unlocked nothing. The test-card unlock hole is closed. PayPal is **connected but still provisioning**: dashboard reads enabled since 2026-09-20 evening, yet `GET /v1/account` still has no `paypal_payments` capability, so `stripe_paypal` is still false. The v72 gate flips with no release once the API catches up. Until then, the Paddle button remains PayPal's only route |
 | Paddle | **sandbox** (`PADDLE_ENV=sandbox`, `test_` client token, webhook secret installed and delivering); live account not started |
 
 Stripe is real money now. Paddle is still sandbox (`PADDLE_ENV=sandbox`, `test_` client token), so its
