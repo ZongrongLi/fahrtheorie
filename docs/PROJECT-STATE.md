@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-20 (Europe/Berlin). Live build: **v72**.
+Snapshot date: 2026-09-20 (Europe/Berlin). Live build: **v76**.
 
 ## Where things live
 
@@ -242,6 +242,17 @@ never a window where live payments could arrive with nothing to verify them:
    language (`t()` reads `prefs.uiLang`), so no change was needed there. The home coffee button/QR block
    is removed; the rail button stays as the single entry (`showSupport` kept for it). Tests: startup 31,
    legal 14, ai-lang 6.
+7. **Site-language theme names + localized Stripe checkout (2026-09-20 night, build v76, commits
+   `f536d98` + `4f1fd40`).** Theme tiles, wrong-view chips and category titles now read `theme.<id>` from
+   the site-language pack (14 keys x 10 packs), with the quiz-language name stack as fallback only;
+   switching either dropdown rebuilds the index. Checkout posts `{locale, lang}` = site language: the
+   Worker sets the Stripe Checkout `locale` (`uk`/`ar` fall back to `auto`, Stripe has no such locales)
+   and returns buyer-facing payment errors (need-login / bad-method / method-off / no-order / query-fail /
+   not-paid / mismatch / create-fail) in that language, Chinese when no lang is sent. Tests: startup 31,
+   legal 17, ai-lang 6, backend 109. Live verified: 10/10 files md5 MATCH, `/api/pay-methods` still
+   `stripe_paypal:true`, unauthenticated `/api/checkout` 401s localized live (en/de/zh). Test price stays
+   EUR 0.50 (`PRICE_CENTS="50"`); restore `"500"` when testing ends. `privacy.html`/`terms.html` remain
+   Chinese-only legal texts (translating them needs legal review, not a code change).
 4. **Payout bank decision (2026-09-20 evening): keep Stripe as is.** The dashboard's money-management
    page shows the payout account is Revolut ending 7724 (EUR, default) - found at
    Settings -> "Linked accounts and payouts" -> `/settings/money-management` (the older guesses
