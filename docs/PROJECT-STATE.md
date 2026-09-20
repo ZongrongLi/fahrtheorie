@@ -179,13 +179,18 @@ and the endpoint is back to real detection (`stripe_paypal: false`).
 
 | Provider | State |
 |---|---|
-| Stripe | **test key** (`pk_test`/`sk_test`) + test webhook. A live key exists in `~/stripe_s` and the live webhook is already built and installed (`STRIPE_WEBHOOK_SECRET`, endpoint `we_1UHg4lLq2GeVvCtZnhPHYlIY`), but the account is **not activated** - 0 bank accounts and an empty `individual.verification` - so the key was deliberately not swapped: a live session cannot be paid and the buy button would just error |
+| Stripe | **LIVE** since 2026-09-20: `STRIPE_SECRET_KEY` is the `sk_live_` key and `/api/checkout` returns `cs_live_` sessions. Live webhook `we_1UHg4lLq2GeVvCtZnhPHYlIY` is installed as `STRIPE_WEBHOOK_SECRET` (verified 400 / 400 / 200 against the running worker). The test-card unlock hole is closed. **This account has no `paypal_payments` capability** - it is absent from both the API and the dashboard's 16 active capabilities - so PayPal still only exists on the Paddle button |
 | Paddle | **sandbox** (`PADDLE_ENV=sandbox`, `test_` client token, webhook secret installed and delivering); live account not started |
 
-So both buttons on the live site are test-mode. Switching to real money needs: Stripe account
-activation + live key + live webhook, and a Paddle live account (self-serve signup, then
-identity verification; individuals are accepted) with a live price rebuilt and its own
-default-payment-link step.
+Stripe is real money now. Paddle is still sandbox (`PADDLE_ENV=sandbox`, `test_` client token), so its
+two buttons still take test cards and test WeChat. Going live on Paddle needs the live account
+(self-serve signup, then identity verification; individuals are accepted), a live price rebuilt, its
+own default-payment-link step, and **its own webhook destination plus a second signing secret** - the
+sandbox secret cannot verify live traffic and fail-closed would turn live payments into 503s.
+
+One correction worth keeping: `GET /v1/account?expand[]=external_accounts` reported 0 bank accounts
+while the dashboard said payouts were active with no outstanding tasks. Trust the dashboard here -
+that API expansion is not a reliable "no bank configured" signal.
 
 ## Verification evidence
 
