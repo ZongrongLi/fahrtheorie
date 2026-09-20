@@ -131,7 +131,8 @@ function paidReturn(search) {
 test('Paddle return URL verifies the transaction', () => {
   const { calls, bodies } = paidReturn('?dtt_paid=1&provider=paddle&_ptxn=txn_abc123');
   assert.deepEqual(calls, ['https://dtt-backend.tiancai110a.workers.dev/api/paddle/verify']);
-  assert.deepEqual(JSON.parse(bodies[0]), { transaction_id: 'txn_abc123' });
+  assert.equal(JSON.parse(bodies[0]).transaction_id, 'txn_abc123');
+  assert.equal(typeof JSON.parse(bodies[0]).lang, 'string', 'verify carries the site language for localized errors');
 });
 
 /* Observed live from the sandbox API on 2026-09-18: Paddle puts _ptxn FIRST and keeps our
@@ -139,13 +140,15 @@ test('Paddle return URL verifies the transaction', () => {
 test('Paddle return URL verifies when _ptxn comes first', () => {
   const { calls, bodies } = paidReturn('?_ptxn=txn_01m2v47p7stwy9hda2nhnzr21p&dtt_paid=1&provider=paddle');
   assert.deepEqual(calls, ['https://dtt-backend.tiancai110a.workers.dev/api/paddle/verify']);
-  assert.deepEqual(JSON.parse(bodies[0]), { transaction_id: 'txn_01m2v47p7stwy9hda2nhnzr21p' });
+  assert.equal(JSON.parse(bodies[0]).transaction_id, 'txn_01m2v47p7stwy9hda2nhnzr21p');
+  assert.equal(typeof JSON.parse(bodies[0]).lang, 'string', 'verify carries the site language for localized errors');
 });
 
 test('Paddle return URL still verifies when the id is appended after a second ?', () => {
   const { calls, bodies } = paidReturn('?dtt_paid=1&provider=paddle?_ptxn=txn_xyz789');
   assert.match(calls[0], /\/api\/paddle\/verify$/);
-  assert.deepEqual(JSON.parse(bodies[0]), { transaction_id: 'txn_xyz789' });
+  assert.equal(JSON.parse(bodies[0]).transaction_id, 'txn_xyz789');
+  assert.equal(typeof JSON.parse(bodies[0]).lang, 'string', 'verify carries the site language for localized errors');
 });
 
 test('a plain visit never triggers a payment verification', () => {
@@ -318,7 +321,8 @@ test('checkout.completed verifies the transaction with our backend', async () =>
     'https://dtt-backend.tiancai110a.workers.dev/api/paddle/verify',
     'https://dtt-backend.tiancai110a.workers.dev/api/me',
   ], 'verify first, then keep watching the account so nobody has to refresh by hand');
-  assert.deepEqual(JSON.parse(bodies[0]), { transaction_id: 'txn_new' });
+  assert.equal(JSON.parse(bodies[0]).transaction_id, 'txn_new');
+  assert.equal(typeof JSON.parse(bodies[0]).lang, 'string', 'verify carries the site language for localized errors');
 });
 
 test('unrelated Paddle events do not trigger a verification', async () => {
@@ -447,7 +451,10 @@ test('clicking the button opens a plain Stripe session so the checkout lists eve
   await tick();
   const i = calls.findIndex((c) => /\/api\/checkout$/.test(c));
   assert.ok(i >= 0, 'the Stripe checkout endpoint must be called');
-  assert.equal(bodies[i], '{}', 'no method is forced, so Stripe offers card + PayPal (+ later Alipay/WeChat)');
+  const sent5 = JSON.parse(bodies[i]);
+  assert.equal('method' in sent5, false, 'no method is forced, so Stripe offers card + PayPal (+ later Alipay/WeChat)');
+  assert.equal(typeof sent5.locale, 'string', 'checkout sends the site language as Stripe locale');
+  assert.equal(typeof sent5.lang, 'string', 'checkout sends lang for localized errors');
 });
 
 /* Paddle can report the checkout as finished before its own API says the transaction is paid, and
