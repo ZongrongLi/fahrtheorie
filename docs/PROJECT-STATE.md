@@ -225,6 +225,15 @@ never a window where live payments could arrive with nothing to verify them:
    (`99dd29a5`), live `/api/pay-methods` returns
    `stripe_methods:{"card":true,"paypal":true,"alipay":false,"wechat_pay":false}`; live site is build v73
    (5 front-end files md5-identical, `styles.css` unchanged), KV still the 8-key baseline via `--remote`.
+5. **Single Stripe button (2026-09-20 afternoon, build v74, commit `58be327`).** The owner completed a real
+   PayPal payment end to end (pay -> redirect back -> unlock, all green) and decided the per-method and
+   Paddle buttons only add confusion: the Stripe Checkout already lists every live method itself (card +
+   PayPal today; Alipay/WeChat appear there on their own once Stripe approves them). The dialog now
+   renders exactly one Stripe button with no forced `method` (plain `/api/checkout` session, dashboard
+   configuration decides); only the wording still follows `stripe_paypal`. Dead labels (`pay.paddle`,
+   `pay.wechat`, `pay.paddleLocal`, `pay.sCard/sPaypal/sAlipay/sWechat`) removed from all 10 packs, dead
+   gating code removed from `showUnlock`. Backend `/api/checkout {method}` stays live and tested for
+   future use. Tests: startup 31, legal 11, ai-lang 6, backend 102.
 4. **Payout bank decision (2026-09-20 evening): keep Stripe as is.** The dashboard's money-management
    page shows the payout account is Revolut ending 7724 (EUR, default) - found at
    Settings -> "Linked accounts and payouts" -> `/settings/money-management` (the older guesses
