@@ -179,7 +179,7 @@ and the endpoint is back to real detection (`stripe_paypal: false`).
 
 | Provider | State |
 |---|---|
-| Stripe | **test key** (`pk_test`/`sk_test`) + test webhook; live account still not activated |
+| Stripe | **test key** (`pk_test`/`sk_test`) + test webhook. A live key exists in `~/stripe_s` and the live webhook is already built and installed (`STRIPE_WEBHOOK_SECRET`, endpoint `we_1UHg4lLq2GeVvCtZnhPHYlIY`), but the account is **not activated** - 0 bank accounts and an empty `individual.verification` - so the key was deliberately not swapped: a live session cannot be paid and the buy button would just error |
 | Paddle | **sandbox** (`PADDLE_ENV=sandbox`, `test_` client token, webhook secret installed and delivering); live account not started |
 
 So both buttons on the live site are test-mode. Switching to real money needs: Stripe account
