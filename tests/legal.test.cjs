@@ -177,6 +177,35 @@ test('only the rail keeps the coffee button, the home copy is gone', () => {
   assert.ok(read('index.html').includes('data-act="support"'), 'the rail coffee button stays');
 });
 
+test('every theme name exists in every site-language pack', () => {
+  const I = packs();
+  const thids = ['1.1','1.2','1.3','1.4','1.5','1.7','1.8','2.1','2.2','2.4','2.5','2.6','2.7','2.8'];
+  for (const lang of LANGS) {
+    for (const th of thids) {
+      const v = I[lang]['theme.' + th];
+      assert.ok(v && v.trim(), `${lang} lacks theme.${th}`);
+    }
+  }
+  const names1 = LANGS.map(l => I[l]['theme.1.1']);
+  assert.ok(new Set(names1).size >= 9, `theme.1.1 must be translated per site language, got ${[...new Set(names1)]}`);
+  assert.equal(I.zh['theme.1.1'], '危险学');
+  assert.equal(I.en['theme.1.1'], 'Hazard theory');
+  assert.equal(I.de['theme.1.1'], 'Gefahrenlehre');
+});
+
+test('theme tiles prefer the site-language name and never the quiz stack', () => {
+  const app = read('app.js');
+  assert.ok(app.includes('T.thz || trName'), 'tiles must prefer the site-language theme name');
+  assert.ok(app.includes('buildIndex()'), 'switching language must rebuild the theme index');
+});
+
+test('checkout carries the site language and verify echoes it back', () => {
+  const app = read('app.js');
+  assert.ok(app.includes('payload.locale = prefs.uiLang'), 'checkout must send the site language as Stripe locale');
+  assert.ok(app.includes('payload.lang = prefs.uiLang'), 'checkout must also send lang for localized errors');
+  assert.ok(app.includes('Object.assign({ lang: prefs.uiLang }, payload)'), 'verify must send lang for localized errors');
+});
+
 test('the quiz-language label says quiz in every pack', () => {
   const I = packs();
   const want = { zh: '刷题语言', en: 'Quiz language', de: 'Übungssprache', ru: 'Язык заданий',

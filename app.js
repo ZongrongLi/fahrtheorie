@@ -236,9 +236,14 @@
 
   function buildIndex() {
     INDEX = { themes: [], part1: [], part2: [], byTheme: {} };
+    /* Theme display name follows the SITE language: theme.<th> packs carry the translation,
+       zhTheme()/official German/English are only fallbacks. Question text (langText) still
+       follows the QUIZ language - the two settings must never leak into each other. */
+    var ui = (window.I18N[prefs.uiLang] || {});
+    function uiTheme(th) { return ui["theme." + th] || ""; }
     CAT.forEach(function (q) {
       var th = q.th, ch = q.ch;
-      var T = INDEX.byTheme[th] || (INDEX.byTheme[th] = { th: th, thd: q.thd, the: q.the, chapters: {}, count: 0, part: th.charAt(0) === "2" ? 2 : 1 });
+      var T = INDEX.byTheme[th] || (INDEX.byTheme[th] = { th: th, thd: q.thd, the: q.the, thz: uiTheme(th), chapters: {}, count: 0, part: th.charAt(0) === "2" ? 2 : 1 });
       T.count++;
       var C = T.chapters[ch] || (T.chapters[ch] = { ch: ch, chd: q.chd, che: q.che, count: 0 });
       C.count++;
@@ -350,7 +355,7 @@
     var pct = Math.round(done / T.count * 100);
     return '<a class="tile t' + (i % 6) + '" href="#/cat/' + encodeURIComponent(T.th) + '">' +
       '<div class="tile-top"><span class="tile-code">' + esc(T.th) + '</span>' + ic("chev") + '</div>' +
-      '<h3>' + esc(trName(T.thd, T.the, zhTheme(T.th))) + '</h3>' +
+      '<h3>' + esc(T.thz || trName(T.thd, T.the, zhTheme(T.th))) + '</h3>' +
       '<div class="tile-meta">' + T.count + " " + esc(t("cat.questions")) + (wr ? ' · <b class="warn">' + wr + " " + esc(t("cat.wrongShort")) + '</b>' : "") + '</div>' +
       '<div class="tile-bar"><span style="width:' + pct + '%"></span></div>' +
       '</a>';
@@ -400,7 +405,7 @@
     var wr = arr.filter(function (q) { return state.q[q.id] && state.q[q.id].wrong; }).length;
     var unseen = arr.length - done;
     var pct = Math.round(done / arr.length * 100);
-    var head = (ch ? trName(T.chapters[ch].chd, T.chapters[ch].che, zhChap(ch)) : trName(T.thd, T.the, zhTheme(T.th)));
+    var head = ch ? trName(T.chapters[ch].chd, T.chapters[ch].che, zhChap(ch)) : (T.thz || trName(T.thd, T.the, zhTheme(T.th)));
     return '' +
       '<section class="page-h">' +
         '<a class="back" href="#/categories">' + ic("left") + esc(t("cat.title")) + '</a>' +
@@ -447,7 +452,7 @@
   function sessionTitle(p) {
     if (!p.c || p.c === "ALL") return t("mode.all");
     var T = INDEX.byTheme[p.c]; if (!T) return p.c;
-    return p.ch ? trName(T.chapters[p.ch].chd, T.chapters[p.ch].che, zhChap(p.ch)) : trName(T.thd, T.the, zhTheme(p.c));
+    return p.ch ? trName(T.chapters[p.ch].chd, T.chapters[p.ch].che, zhChap(p.ch)) : (T.thz || trName(T.thd, T.the, zhTheme(p.c)));
   }
   function pickIds(c, ch, m, s) {
     var arr = c === "ALL" ? CAT.slice() : qsIn(c, ch || null);
@@ -996,7 +1001,7 @@
     var head = '<section class="page-h"><span class="eyebrow">' + ic("alert") + esc(t("wrong.title")) + '</span><h1>' + esc(t("wrong.title")) + '</h1><p class="lede">' + esc(t("wrong.sub")) + '</p>' +
       '<div class="chips"><a class="chip' + (!th ? " on" : "") + '" href="#/wrong">' + esc(t("wrong.allCats")) + '</a>' +
       INDEX.themes.filter(function (T) { return arr.some(function (q) { return q._th === T.th; }); }).map(function (T) {
-        return '<a class="chip' + (th === T.th ? " on" : "") + '" href="#/wrong/' + encodeURIComponent(T.th) + '">' + esc(trName(T.thd, T.the, zhTheme(T.th))) + '</a>';
+        return '<a class="chip' + (th === T.th ? " on" : "") + '" href="#/wrong/' + encodeURIComponent(T.th) + '">' + esc(T.thz || trName(T.thd, T.the, zhTheme(T.th))) + '</a>';
       }).join("") + '</div>';
     if (!arr.length) return head + '<div class="empty card"><h2>' + esc(t("wrong.empty")) + '</h2><a class="btn primary" href="#/categories">' + esc(t("wrong.emptyAction")) + '</a></div></section>';
     return head +
@@ -1045,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v75 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v76 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1230,6 +1235,7 @@
     var payload = {};
     if (isPaddle && currency) payload = { currency: currency };
     else if (!isPaddle && method) payload = { method: method };
+    if (!isPaddle) { payload.locale = prefs.uiLang; payload.lang = prefs.uiLang; }
     fetch(apiRoot() + (isPaddle ? "/api/paddle/checkout" : "/api/checkout"), {
       method: "POST", headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token },
       body: JSON.stringify(payload)
@@ -1329,7 +1335,7 @@
     if (!apiRoot() || !prefs.token || !payload) return;
     var isPaddle = !!payload.transaction_id;
     fetch(apiRoot() + (isPaddle ? "/api/paddle/verify" : "/api/verify-payment"), {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token }, body: JSON.stringify(payload)
+      method: "POST", headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token }, body: JSON.stringify(Object.assign({ lang: prefs.uiLang }, payload))
     })
       .then(function (r) { return r.json(); })
       .then(function (j) {
@@ -1495,7 +1501,7 @@
   /* ---------------- events ---------------- */
   document.addEventListener("click", function (e) {
     var segBtn = e.target.closest("[data-seg] .seg-btn");
-    if (segBtn) { var name = segBtn.closest("[data-seg]").getAttribute("data-seg"); var key = name === "uilang" ? "uiLang" : name === "contentlang" ? "contentLang" : name === "expllang" ? "explLang" : name === "scope" ? "scope" : "theme"; prefs[key] = segBtn.getAttribute("data-val"); if (key === "explLang") window.__explLang = prefs.explLang; savePrefs(); applyTheme(); if (key === "scope") { applyScope(); route(); } else { document.getElementById("view").innerHTML = vSettings(); } return; }
+    if (segBtn) { var name = segBtn.closest("[data-seg]").getAttribute("data-seg"); var key = name === "uilang" ? "uiLang" : name === "contentlang" ? "contentLang" : name === "expllang" ? "explLang" : name === "scope" ? "scope" : "theme"; prefs[key] = segBtn.getAttribute("data-val"); if (key === "explLang") window.__explLang = prefs.explLang; savePrefs(); applyTheme(); buildIndex(); if (key === "scope") { applyScope(); route(); } else { document.getElementById("view").innerHTML = vSettings(); } return; }
 
     var el = e.target.closest("[data-act]:not(select)"); if (!el) return;
     var act = el.getAttribute("data-act");
@@ -1598,7 +1604,7 @@
       var kind = e.target.getAttribute("data-lang");
       prefs[kind === "ui" ? "uiLang" : "contentLang"] = e.target.value;
       if (!langKnown(prefs.uiLang)) prefs.uiLang = "zh";
-      savePrefs(); aiHist = {}; applyTheme();
+      savePrefs(); aiHist = {}; applyTheme(); buildIndex();
       toast(kind === "ui" ? langPickerName(prefs.uiLang) : t("lang." + prefs.contentLang));
       refresh();
       return;
