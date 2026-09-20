@@ -234,6 +234,14 @@ never a window where live payments could arrive with nothing to verify them:
    `pay.wechat`, `pay.paddleLocal`, `pay.sCard/sPaypal/sAlipay/sWechat`) removed from all 10 packs, dead
    gating code removed from `showUnlock`. Backend `/api/checkout {method}` stays live and tested for
    future use. Tests: startup 31, legal 11, ai-lang 6, backend 102.
+6. **Top-bar language labels + single coffee button (2026-09-20 evening, build v75, commit `5f6949b`).**
+   The two top-bar dropdowns only had hover titles, so buyers could not tell quiz language from site
+   language. Each picker now shows a visible label (hidden on very narrow screens, title kept), and
+   `settings.contentLang` is renamed to quiz language in all 10 packs (`刷题语言` / Quiz language /
+   Übungssprache / …) with `settings.langNote` reworded to match. Payment copy already follows the site
+   language (`t()` reads `prefs.uiLang`), so no change was needed there. The home coffee button/QR block
+   is removed; the rail button stays as the single entry (`showSupport` kept for it). Tests: startup 31,
+   legal 14, ai-lang 6.
 4. **Payout bank decision (2026-09-20 evening): keep Stripe as is.** The dashboard's money-management
    page shows the payout account is Revolut ending 7724 (EUR, default) - found at
    Settings -> "Linked accounts and payouts" -> `/settings/money-management` (the older guesses
