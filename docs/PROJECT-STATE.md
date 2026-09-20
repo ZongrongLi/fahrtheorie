@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-19 (Europe/Berlin). Live build: **v72**.
+Snapshot date: 2026-09-20 (Europe/Berlin). Live build: **v72**.
 
 ## Where things live
 
@@ -175,11 +175,60 @@ Verified live by temporarily forcing the flag on: the dialog collapsed to exactl
 "银行卡 / Apple Pay / PayPal (Stripe)" and "微信支付 (中国, ¥ 人民币)" - then the override was removed
 and the endpoint is back to real detection (`stripe_paypal: false`).
 
+## 2026-09-20: Stripe went live
+
+The owner submitted Stripe identity verification himself and put `sk_live_…` into `~/stripe_s`. Same day
+the account flipped to `charges_enabled: true / payouts_enabled: true` with "no outstanding tasks".
+I then - **in this order** - created the live webhook first and only then swapped the key, so there was
+never a window where live payments could arrive with nothing to verify them:
+
+- live webhook endpoint `we_1UHg4lLq2GeVvCtZnhPHYlIY`, event `checkout.session.completed`, installed as
+  Worker secret `STRIPE_WEBHOOK_SECRET`; signature handling re-checked against the running worker
+  (no header 400 / forged 400 / valid 200)
+- `STRIPE_SECRET_KEY` replaced with the live key, deployed (Worker `71657322`), and `/api/checkout`
+  verified to return `cs_live_` sessions
+- a live Price `price_1UHgDOLq2GeVvCtZFOV4AvjQ` (EUR 5.00, `lookup_key=dtt_unlimited`) was created as a
+  spare; the code still builds prices inline, so nothing depends on it
+- side effect worth stating: the test-card hole (`4242…` unlocking for free) is closed
+
+### Two things still open on Stripe, and neither is code
+
+1. **PayPal is not activated.** It needs a PayPal merchant approval that Stripe starts from
+   Settings -> Payments (`/settings/checkout`) -> payment methods. Until it is approved, it does not
+   appear in `GET /v1/account` capabilities at all - so an absent capability is **not** evidence that
+   PayPal cannot be enabled. I asserted exactly that on 2026-09-20 and was corrected by the owner
+   pointing at the dashboard; the fix is recorded below so it does not repeat.
+   The front end is already capability-gated (v72): the moment `stripe_paypal` turns true the Stripe
+   button gains PayPal and the Paddle button disappears, with no release. Until then the Paddle button
+   is PayPal's only route and must stay.
+2. **The payout bank was not switched to C24.** The owner supplied an IBAN (C24 Bank, BLZ 50024024;
+   I verified its mod-97 check digits before touching anything). The live key cannot add or change a
+   bank - `POST /v1/account/external_accounts` returns `more_permissions_required` - and no IBAN field
+   could be found in the dashboard, while Payouts reads as active, so a bank is most likely already in
+   place. Changing a payout account is the kind of action that sends money to the wrong place, so I
+   stopped and asked rather than guessing at the UI.
+
+### How I was driving his browser, and why it cost me
+
+The Stripe/Paddle dashboards needed his logged-in session, which `agent-browser` (a separate Playwright
+browser) does not have. What works is the CDP layer under `jev-ultrafast`
+(`/Users/zongrongli/tools/jev-ultrafast`, run with `uv run --env-file .env`):
+`from browser_harness.helpers import cdp`, then `Target.createTarget` / `Target.attachToTarget`
+(filter to `type == "page"` or `Page.navigate` fails) / `Runtime.evaluate`. That daemon controls his
+real Chrome, so the session is there.
+
+Three limits that bit me: `Page.captureScreenshot` always times out on this daemon (tried 5s and 60s),
+so I never saw a single page; Chrome suspends background tabs, so reading an existing one often returns
+0 characters and looks empty; and several plausible Stripe routes (`/settings/payment-methods`,
+`/account_details`, `/settings/account/bank_accounts`) bounce to `/dashboard`. Blind to the visuals, I
+burned a lot of turns guessing selectors and then drew the wrong PayPal conclusion from the API.
+**For any heavy React admin, ask for a screenshot first.**
+
 ## Current payment state
 
 | Provider | State |
 |---|---|
-| Stripe | **LIVE** since 2026-09-20: `STRIPE_SECRET_KEY` is the `sk_live_` key and `/api/checkout` returns `cs_live_` sessions. Live webhook `we_1UHg4lLq2GeVvCtZnhPHYlIY` is installed as `STRIPE_WEBHOOK_SECRET` (verified 400 / 400 / 200 against the running worker). The test-card unlock hole is closed. PayPal is **not yet activated**: it needs a separate PayPal merchant approval that Stripe starts from the dashboard, and until it is approved it never appears in `GET /v1/account` capabilities - so an absent capability there is not evidence that it cannot be enabled (I drew that wrong conclusion once on 2026-09-20). Until PayPal is live, the Paddle button remains its only route |
+| Stripe | **LIVE** since 2026-09-20: `STRIPE_SECRET_KEY` is the `sk_live_` key and `/api/checkout` returns `cs_live_` sessions. Live webhook `we_1UHg4lLq2GeVvCtZnhPHYlIY` is installed as `STRIPE_WEBHOOK_SECRET`. Re-verified against the running worker on 2026-09-20, all four states: missing `Stripe-Signature` -> 400, forged `v1` -> 400, correctly HMAC-signed + fresh `ts` -> `{"ok":true}` 200, correctly signed + `ts` 10000s old -> `{"error":"stale"}` 400. The self-test event referenced a non-existent session and a non-existent uid, and KV still holds exactly 8 keys afterwards, so it unlocked nothing. The test-card unlock hole is closed. PayPal is **not yet activated**: it needs a separate PayPal merchant approval that Stripe starts from the dashboard, and until it is approved it never appears in `GET /v1/account` capabilities - so an absent capability there is not evidence that it cannot be enabled (I drew that wrong conclusion once on 2026-09-20). Until PayPal is live, the Paddle button remains its only route |
 | Paddle | **sandbox** (`PADDLE_ENV=sandbox`, `test_` client token, webhook secret installed and delivering); live account not started |
 
 Stripe is real money now. Paddle is still sandbox (`PADDLE_ENV=sandbox`, `test_` client token), so its
@@ -194,7 +243,8 @@ that API expansion is not a reliable "no bank configured" signal.
 
 ## Verification evidence
 
-- Front end: `node tests/startup.test.cjs` 33, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 11 -> **51 passed, 0 failed**
+- Front end: `node tests/startup.test.cjs` 33, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 12 -> **51 passed, 0 failed**.
+  Run the three files individually - `node --test tests/` (directory form) does not work in this repo.
 - v69 verified live: `refunds.html` returns 404 and zero refund words remain in `index.html`, `app.js`,
   `i18n.js`, `privacy.html`, `terms.html`; all five files md5-match local
 - Backend: `dtt-backend` `node test.mjs` -> **89 passed, 0 failed** (was 53 before this work)
@@ -203,7 +253,10 @@ that API expansion is not a reliable "no bank configured" signal.
   `POST /api/paddle/verify` with that id returned `{"ok":true,"unlimited":true,"provider":"paddle"}`,
   `GET /api/me` then showed `unlimited:true`, and a second account verifying the same transaction
   got **403**. Screenshots: `outputs/dtt_v62_*.png`, `dtt_v61_paddle_overlay.png`.
-- Live site serves `build v66`; `app.js` contains `eventCallback` and the v2 CDN URL.
+- Live site served `build v66` at the time of that check; **as of 2026-09-20 it serves `build v72`**, and all ten
+  shipped files (`app.js i18n.js index.html styles.css privacy.html terms.html favicon.svg favicon.ico favicon.png
+  apple-touch-icon.png`) md5-match local. `/api/pay-methods` live returns `stripe_paypal:false`,
+  `paddle_wechat_currencies:["CNY","USD"]`, both providers on.
 - v66 bug: `refreshQuota()` only ever did `if (j.unlimited === true) prefs.unlimited = true`, never the
   other way, so `prefs.unlimited` was sticky - clearing an account in KV changed nothing on screen. Now
   the server value is mirrored both ways, while a failed `/api/me` leaves the flag alone (a network
@@ -217,11 +270,24 @@ that API expansion is not a reliable "no bank configured" signal.
 - Second real sandbox payment `txn_01m2v9tjseke6hm6f1ff9sbfdg` (EUR 5.00, `completed`,
   `custom_data.uid` = the payer's uid) unlocked **through the webhook alone** after the retry.
 - KV cleaned afterwards: the two throwaway accounts (6 keys) were deleted, back to the 8-key baseline.
+- ⚠️ **2026-09-20 tooling trap, and it invalidates older "verified clean" claims**: `wrangler kv key list` /
+  `get` / `delete` without **`--remote`** read the local `.wrangler/state` miniflare directory and return `[]`
+  **without erroring** - so "I deleted it and checked with `key list`" can be a completely empty confirmation.
+  Re-checked both ways on 2026-09-20 (`--remote` and the Cloudflare REST
+  `/storage/kv/namespaces/f69474f8…/keys`): the namespace really holds **8 keys** - three each for the two real
+  accounts (`389006500@qq.com`, `tiancai110a@gmail.com`) plus two stale `uid:`/`tok:` keys left when the
+  owner's own account was recreated (both point at the same email, harmless). **No throwaway account survives.**
+  `user:389006500@qq.com` currently has **no `unlimited` field**, so the owner can pay again - which matches what
+  the live UI does. Always pass `--remote` (or use REST) when checking or clearing KV.
 
 ## Open items
 
-1. Stripe live key + live webhook (blocked on account activation).
-2. Paddle live account, live price, live client-side token, then flip `PADDLE_ENV` and redeploy.
+0. Stripe: get PayPal approved in the dashboard, and settle the payout bank (C24 or keep the current
+   one). Both are dashboard actions for the owner, not code. Then confirm the chooser really collapsed
+   to two buttons - v72 should do it on its own.
+
+1. ~~Stripe live key + live webhook (blocked on account activation)~~ **done 2026-09-20** - see the section above.
+2. Paddle live account, live price, live client-side token, then flip `PADDLE_ENV` and redeploy. Owner said next round.
 3. ~~Paddle webhook is not registered~~ - done for sandbox. **The live account still needs its own
    destination + `PADDLE_WEBHOOK_SECRET`**; the sandbox secret will not verify live traffic, and
    fail-closed means live payments would then 503 rather than unlock.
@@ -237,9 +303,8 @@ that API expansion is not a reliable "no bank configured" signal.
    (`outputs/dtt_v65_real_cny_wechat.png`).
    Still open: a CN integer price via `unit_price_overrides` (¥38.48 reads badly), and Alipay, which
    needs separate Paddle approval and is not in the toggle list at all.
-5. WeChat Pay still needs a **live** Paddle account before a real payment can complete; in the sandbox
+6. WeChat Pay still needs a **live** Paddle account before a real payment can complete; in the sandbox
    the button renders and the QR appears, but there is no real WeChat settlement to scan.
-6. A CN integer price via `unit_price_overrides` (¥38.48 reads badly next to "€5").
 7. Native-speaker review for the eight machine-translated packs.
 
 ## Local development
@@ -252,8 +317,19 @@ python3 /Users/zongrongli/.openclaw-autoclaw/workspace/dtt_serve.py
 # front-end tests
 node tests/startup.test.cjs && node tests/ai-lang.test.cjs && node tests/legal.test.cjs
 
-# release: bump ?v=NN in index.html (7 places), rail-foot badge, and the About page string
+# release: bump ?v=NN in index.html (7 places) + rail-foot badge + the About page string in app.js,
+#         and styles.css?v=NN on privacy.html and terms.html. `?v=64` contains "v=64", not "v64", so a
+#         plain "v64" search-replace silently misses all 7 cache params - the test catches it, don't rely on eyes.
 git add -A && git commit -m "build vNN: ..." && git push origin main
+
+# after pushing: confirm the remote really moved, then diff local vs live file by file
+git -C /Users/zongrongli/.openclaw-autoclaw/workspace/projects/website-6c66368f96582c8c2689b361 fetch -q origin && \
+  git -C /Users/zongrongli/.openclaw-autoclaw/workspace/projects/website-6c66368f96582c8c2689b361 rev-list --count origin/main..HEAD   # 0
+curl -s https://fahrtheorie.homes/ | grep -o 'build v[0-9]*'
+for f in app.js i18n.js index.html styles.css privacy.html terms.html; do l=$(md5 -q "$f"); r=$(curl -s "https://fahrtheorie.homes/$f" | md5 -q); [ "$l" = "$r" ] && echo "$f MATCH" || echo "$f DIFF"; done
+
+# KV: always pass --remote, or wrangler reads .wrangler/state and reports an empty namespace
+npx wrangler kv key list --binding DTT --remote
 ```
 
 Backend deploy and secrets: see `../dtt-backend/README.md` and `../dtt-backend/PADDLE-ONBOARDING.md`.
