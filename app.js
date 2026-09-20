@@ -1050,7 +1050,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v73 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v74 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1409,38 +1409,14 @@
       var prov = (info && info.providers) || {};
       var btns = "";
       var paypalReady = info && info.stripe_paypal === true;
-      /* 四个按钮都走 Stripe，各带各的 method；哪个出现由后端的 stripe_methods 说了算
-         （Stripe 后台"待批准"的方式 API 直接拒单，写出来就是空口许诺）。
-         批下来自动多出按钮，不用再发版。老后端没给 stripe_methods 时退回以前的合并按钮。 */
-      var sm = (info && info.stripe_methods) || null;
-      if (prov.stripe && sm) {
-        if (sm.card) btns += '<button class="btn primary" data-act="pay" data-provider="stripe" data-method="card">' + esc(t("pay.sCard")) + '</button>';
-        if (sm.paypal) btns += '<button class="btn primary" data-act="pay" data-provider="stripe" data-method="paypal">' + esc(t("pay.sPaypal")) + '</button>';
-        if (sm.alipay) btns += '<button class="btn primary" data-act="pay" data-provider="stripe" data-method="alipay">' + esc(t("pay.sAlipay")) + '</button>';
-        if (sm.wechat_pay) btns += '<button class="btn primary" data-act="pay" data-provider="stripe" data-method="wechat_pay">' + esc(t("pay.sWechat")) + '</button>';
-      }
-      else if (prov.stripe) btns += '<button class="btn primary" data-act="pay" data-provider="stripe">' + esc(t(paypalReady ? "pay.stripePaypal" : "pay.stripe")) + '</button>';
-      /* Paddle 那个"本地支付"按钮目前是 PayPal 的唯一入口。Stripe 一旦开通 PayPal 它就重复了，
-         所以到时候自动收掉；没开通之前不能提前删，也不能提前把 PayPal 写进 Stripe 的文案。 */
-      if (prov.paddle && !paypalReady && !sm) btns += '<button class="btn primary" data-act="pay" data-provider="paddle">' + esc(t("pay.paddle")) + '</button>';
-      /* Paddle 只在交易币种是 CNY/USD 且结账页国家选中国时才出微信，而 IP 判断不了人（挂欧洲 VPN 的中国人）。
-         所以给一个明确入口：点它就直接开一笔人民币的单。后端没列出可用币种时这个按钮不出现，不空口许诺。 */
-      var wxc = (info && info.paddle_wechat_currencies) || [];
-      if (prov.paddle && wxc.indexOf("CNY") >= 0 && !(sm && sm.wechat_pay)) {
-        btns += '<button class="btn primary" data-act="pay" data-provider="paddle" data-currency="CNY">' + esc(t("pay.wechat")) + '</button>';
-      }
+      /* 一个按钮，一次 Stripe 收银台。收银台里能选什么由 Stripe 的动态支付方式说了算：
+         现在有银行卡和 PayPal，Stripe 批下支付宝/微信后它们自己就会出现，这里不用再改。
+         所以只需要管住文案 —— 没开通 PayPal 就不能写 PayPal（2026-09-20 实测 PayPal 已开通）。 */
+      if (prov.stripe) btns += '<button class="btn primary" data-act="pay" data-provider="stripe">' + esc(t(paypalReady ? "pay.stripePaypal" : "pay.stripe")) + '</button>';
       var note = document.querySelector('[data-role="pay-note"]');
       if (btns) {
         box.insertAdjacentHTML("afterbegin", btns);
-        if (note) {
-          /* Paddle 只在交易币种是 CNY/USD 时给中国买家出微信，所以后端会按访客 IP 选币种并告诉我们。
-             会被换成当地币种的人，得在付款前看见这件事，而不是到了结账页才发现。 */
-          var base = String(((info && info.price) || {}).currency || "").toUpperCase();
-          var pcur = String((info && info.paddle_currency) || "").toUpperCase();
-          note.textContent = (pcur && pcur !== base)
-            ? t("pay.note") + " " + t("pay.paddleLocal", { c: pcur })
-            : t("pay.note");
-        }
+        if (note) note.textContent = t("pay.note");
       }
       else if (note) note.textContent = t("support.noBuy");
     });

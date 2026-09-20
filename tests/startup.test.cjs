@@ -234,7 +234,7 @@ function clickAct(listeners, act) {
   (listeners.click || []).forEach((fn) => fn(event));
 }
 
-test('the unlock entry opens the provider chooser when Paddle is available', async () => {
+test('the unlock entry opens a single-button Stripe chooser even when Paddle is listed', async () => {
   const { nodes, nav, listeners } = load({
     prefs: signedIn,
     payMethods: { providers: { stripe: true, paddle: true }, paddle_token: 'test_ctk_3' },
@@ -246,7 +246,8 @@ test('the unlock entry opens the provider chooser when Paddle is available', asy
   const box = nodes['pay-btns'];
   assert.ok(box, 'the chooser dialog must render');
   assert.match(box.inserted, /data-provider="stripe"/);
-  assert.match(box.inserted, /data-provider="paddle"/);
+  assert.equal(/data-provider="paddle"/.test(box.inserted), false,
+    'Paddle is gone from the dialog, Stripe is the only way to pay');
 });
 
 /* Paddle.js defaults to the production environment, so a sandbox transaction opened without
@@ -353,8 +354,8 @@ test('a visitor who will be charged in a local currency is told so before paying
   });
   context.window.testShowUnlock();
   await tick();
-  assert.match(nodes['pay-note'].textContent, /CNY/,
-    'the dialog must name the currency this buyer will actually be charged in');
+  assert.equal(nodes['pay-note'].textContent, context.window.I18N.zh['pay.note'],
+    'Stripe charges the price currency, so the CNY hint must not show');
 });
 
 test('no settlement-currency hint when the buyer pays in the price currency', async () => {
@@ -407,7 +408,9 @@ const wechatMethods = {
   price: { cents: 500, currency: 'eur', name: 'Unlimited AI (one-off)' },
   paddle_token: 'test_ctk_wc', paddle_currency: '', paddle_wechat_currencies: ['CNY', 'USD'],
 };
-const PADDLE_CREATED = { provider: 'paddle', id: 'txn_wc_1', url: 'https://sandbox-checkout.paddle.com/txn_wc_1' };
+
+/* stripe_paypal:true = PayPal is live on Stripe, so the one button names it. Hoisted: used above. */
+const stripePaypalMethods = Object.assign({}, wechatMethods, { stripe_paypal: true });
 
 function clickPay(listeners, attrs) {
   const el = {
@@ -419,36 +422,32 @@ function clickPay(listeners, attrs) {
   (listeners.click || []).forEach((fn) => fn(event));
 }
 
-test('the chooser offers a dedicated WeChat Pay entry when the backend supports CNY', async () => {
+test('the chooser shows exactly one Stripe button and no Paddle entries', async () => {
   const { context, nodes } = load({ prefs: signedIn, payMethods: wechatMethods });
   context.window.testShowUnlock();
   await tick();
-  assert.match(nodes['pay-btns'].inserted, /data-currency="CNY"/,
-    'a WeChat entry must ask for a CNY transaction');
+  const inserted = nodes['pay-btns'].inserted;
+  assert.equal((inserted.match(/data-act="pay"/g) || []).length, 1, 'one payment button, not two');
+  assert.match(inserted, /data-provider="stripe"/, 'that button goes to Stripe');
+  assert.equal(/data-provider="paddle"/.test(inserted), false, 'the Paddle entries are gone');
+  assert.equal(/data-currency=/.test(inserted), false, 'no per-currency entry is needed any more');
+  assert.equal(/data-method=/.test(inserted), false,
+    'the buyer picks card/PayPal inside the Stripe checkout, the site must not pin one method');
 });
 
-test('clicking the WeChat entry asks the backend for CNY', async () => {
-  const { context, nodes, listeners, calls, bodies } = load({
-    prefs: signedIn, payMethods: wechatMethods, checkout: PADDLE_CREATED,
+test('clicking the button opens a plain Stripe session so the checkout lists every live method', async () => {
+  const STRIPE_OK = { provider: 'stripe', id: 'cs_test_9', url: 'https://checkout.stripe.com/c/pay/cs_test_9' };
+  const { context, listeners, calls, bodies } = load({
+    prefs: signedIn, payMethods: stripePaypalMethods, checkout: STRIPE_OK,
   });
   context.window.testShowUnlock();
   await tick();
-  context.window.Paddle = { Environment: { set() {} }, Initialize() {}, Checkout: { open() {} } };
   calls.length = 0; bodies.length = 0;
-  clickPay(listeners, { 'data-provider': 'paddle', 'data-currency': 'CNY' });
+  clickPay(listeners, { 'data-provider': 'stripe' });
   await tick();
-  const i = calls.findIndex((c) => /\/api\/paddle\/checkout$/.test(c));
-  assert.ok(i >= 0, 'the Paddle checkout endpoint must be called');
-  assert.match(bodies[i], /"currency":"CNY"/, 'the request must name the currency');
-});
-
-test('no WeChat entry when the backend does not list a WeChat currency', async () => {
-  const plain = Object.assign({}, wechatMethods, { paddle_wechat_currencies: [] });
-  const { context, nodes } = load({ prefs: signedIn, payMethods: plain });
-  context.window.testShowUnlock();
-  await tick();
-  assert.equal(/data-currency=/.test(nodes['pay-btns'].inserted), false,
-    'never promise WeChat that cannot be delivered');
+  const i = calls.findIndex((c) => /\/api\/checkout$/.test(c));
+  assert.ok(i >= 0, 'the Stripe checkout endpoint must be called');
+  assert.equal(bodies[i], '{}', 'no method is forced, so Stripe offers card + PayPal (+ later Alipay/WeChat)');
 });
 
 /* Paddle can report the checkout as finished before its own API says the transaction is paid, and
@@ -504,97 +503,36 @@ test('browsing without paying does not start any polling', async () => {
   assert.deepEqual(calls, [], 'no checkout opened means no repeated account reads');
 });
 
-/* Paddle lets the caller prefill the checkout through Checkout.open's `customer` object, with no
-   API permission needed. A buyer who clicked WeChat Pay has already said they are paying from
-   China, so the overlay must open on China - otherwise Paddle geolocates them to Germany, the form
-   demands a German postcode, and WeChat never appears. */
-const wechatPrefs = { apiBase: 'https://dtt-backend.tiancai110a.workers.dev', token: 'tok', user: 'buyer@example.com', uid: 'u1' };
-
-async function openArgsFor(attrs) {
-  const opened = [];
-  const { context, listeners } = load({
-    prefs: wechatPrefs, payMethods: wechatMethods, checkout: PADDLE_CREATED,
-  });
-  context.window.Paddle = {
-    Environment: { set() {} }, Initialize() {}, Checkout: { open(a) { opened.push(a); } },
-  };
+test('with PayPal live the single button names PayPal instead of pretending only card exists', async () => {
+  const { context, nodes } = load({ prefs: signedIn, payMethods: stripePaypalMethods });
   context.window.testShowUnlock();
   await tick();
-  clickPay(listeners, attrs);
-  await tick();
-  await new Promise((r) => setTimeout(r, 150));   // Paddle.js loads lazily, then replays the queue
-  return opened;
-}
-
-test('the WeChat entry opens the checkout already set to China', async () => {
-  const opened = await openArgsFor({ 'data-provider': 'paddle', 'data-currency': 'CNY' });
-  assert.equal(opened.length, 1, 'exactly one checkout must open');
-  assert.equal(opened[0].customer.address.countryCode, 'CN',
-    'a buyer who chose WeChat must not have to switch the country by hand');
-  assert.equal(opened[0].customer.email, 'buyer@example.com', 'the account email should be prefilled');
+  const inserted = nodes['pay-btns'].inserted;
+  assert.equal((inserted.match(/data-act="pay"/g) || []).length, 1, 'still one button');
+  assert.match(inserted, new RegExp(context.window.I18N.zh['pay.stripePaypal'].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+    'the button must name PayPal now that Stripe can deliver it');
 });
 
-test('the ordinary Paddle entry prefills only the email, never a forced country', async () => {
-  const opened = await openArgsFor({ 'data-provider': 'paddle' });
-  assert.equal(opened.length, 1);
-  assert.equal(opened[0].customer.email, 'buyer@example.com');
-  assert.equal(opened[0].customer.address, undefined,
-    'a German buyer must stay on Paddle geolocated country, not be pushed to China');
-});
-
-/* Each Stripe button carries its own method and is gated by the backend's stripe_methods map:
-   a method Stripe has not approved (alipay/wechat_pay are still pending) must never get a button,
-   because the live API rejects a forced session for it. Approved methods appear on their own. */
-const stripeTwoMethods = Object.assign({}, wechatMethods,
-  { stripe_paypal: true, stripe_methods: { card: true, paypal: true, alipay: false, wechat_pay: false } });
-
-test('with card+PayPal approved the chooser shows two Stripe buttons and keeps the Paddle WeChat fallback', async () => {
-  const { context, nodes } = load({ prefs: signedIn, payMethods: stripeTwoMethods });
-  context.window.testShowUnlock();
-  await tick();
-  assert.match(nodes['pay-btns'].inserted, /data-method="card"/, 'the card button shows');
-  assert.match(nodes['pay-btns'].inserted, /data-method="paypal"/, 'the PayPal button shows');
-  assert.equal(/data-method="alipay"/.test(nodes['pay-btns'].inserted), false,
-    'no Alipay button while Stripe has not approved it');
-  assert.equal(/data-method="wechat_pay"/.test(nodes['pay-btns'].inserted), false,
-    'no Stripe WeChat button while Stripe has not approved it');
-  assert.match(nodes['pay-btns'].inserted, /data-currency="CNY"/,
-    'the Paddle WeChat fallback stays until Stripe approves WeChat');
-});
-
-test('unapproved methods are never advertised and the legacy Paddle entry stays only as fallback', async () => {
+test('without Stripe PayPal the button must not say PayPal', async () => {
   const { context, nodes } = load({ prefs: signedIn, payMethods: wechatMethods });
   context.window.testShowUnlock();
   await tick();
   assert.equal(/PayPal/i.test(nodes['pay-btns'].inserted), false,
     'never advertise PayPal that Stripe has not enabled');
-  assert.match(nodes['pay-btns'].inserted, /data-act="pay" data-provider="paddle">/,
-    'Paddle is the only PayPal route until Stripe turns it on');
+  assert.match(nodes['pay-btns'].inserted, /data-act="pay" data-provider="stripe"/);
 });
 
-test('once Stripe approves everything the chooser shows four Stripe buttons and no Paddle entries', async () => {
-  const all = Object.assign({}, wechatMethods,
-    { stripe_paypal: true, stripe_methods: { card: true, paypal: true, alipay: true, wechat_pay: true } });
-  const { context, nodes } = load({ prefs: signedIn, payMethods: all });
-  context.window.testShowUnlock();
+test('a Stripe-only backend still gets the button and a Paddle-only backend does not', async () => {
+  const onlyStripe = { providers: { stripe: true, paddle: false }, stripe_paypal: true };
+  const a = load({ prefs: signedIn, payMethods: onlyStripe });
+  a.context.window.testShowUnlock();
   await tick();
-  for (const m of ['card', 'paypal', 'alipay', 'wechat_pay'])
-    assert.match(nodes['pay-btns'].inserted, new RegExp('data-method="' + m + '"'), 'button for ' + m + ' shows');
-  assert.equal(/data-provider="paddle"/.test(nodes['pay-btns'].inserted), false,
-    'no Paddle entries once Stripe covers all four');
-});
+  assert.equal((a.nodes['pay-btns'].inserted.match(/data-act="pay"/g) || []).length, 1);
 
-test('clicking a Stripe button sends its method to the backend', async () => {
-  const STRIPE_OK = { provider: 'stripe', id: 'cs_test_9', url: 'https://checkout.stripe.com/c/pay/cs_test_9' };
-  const { context, nodes, listeners, calls, bodies } = load({
-    prefs: signedIn, payMethods: stripeTwoMethods, checkout: STRIPE_OK,
-  });
-  context.window.testShowUnlock();
+  const onlyPaddle = { providers: { stripe: false, paddle: true }, paddle_token: 'ctk' };
+  const b = load({ prefs: signedIn, payMethods: onlyPaddle });
+  b.context.window.testShowUnlock();
   await tick();
-  calls.length = 0; bodies.length = 0;
-  clickPay(listeners, { 'data-provider': 'stripe', 'data-method': 'paypal' });
-  await tick();
-  const i = calls.findIndex((c) => /\/api\/checkout$/.test(c));
-  assert.ok(i >= 0, 'the Stripe checkout endpoint must be called');
-  assert.match(bodies[i], /"method":"paypal"/, 'the request must name the method');
+  assert.equal(/data-act="pay"/.test(b.nodes['pay-btns'].inserted), false,
+    'without Stripe there is nothing to pay with, so no button is promised');
 });

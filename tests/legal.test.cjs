@@ -56,20 +56,26 @@ test('no refund promise survives anywhere', () => {
   }
 });
 
-/* Paddle only shows WeChat Pay once it is enabled in Checkout settings, and Alipay needs a
-   separate Paddle approval we do not have - so the button must not promise Alipay. */
-test('payment labels only promise methods that are actually enabled', () => {
+/* One button, one Stripe Checkout: the buyer picks card/PayPal (/Alipay/WeChat once Stripe approves
+   them) inside Stripe's own dynamic method list, so the site must not name any method Stripe has not
+   turned on. The button wording follows the only capability the backend still reports (stripe_paypal),
+   and the dead Paddle/WeChat/CNY keys are gone from every pack - nobody may re-add a second button
+   by "just" reusing an old label. */
+test('the single button only promises what Stripe can deliver, and no dead labels survive', () => {
   const I = packs();
   for (const lang of LANGS) {
-    const label = I[lang]['pay.paddle'];
-    assert.ok(label, `${lang} lacks pay.paddle`);
-    assert.equal(/alipay|支付宝/i.test(label), false, `${lang}: Alipay is not enabled (needs Paddle approval)`);
-    // The plain Paddle button opens a EUR transaction and Paddle never shows WeChat for EUR.
-    // Naming it there is the exact lie a user hit on the live site; only pay.wechat may promise WeChat.
-    assert.equal(/wechat|微信/i.test(label), false, `${lang}: pay.paddle cannot deliver WeChat Pay (EUR transaction)`);
-    const wx = I[lang]['pay.wechat'];
-    assert.ok(/wechat|微信/i.test(wx), `${lang}: pay.wechat must name WeChat Pay`);
-    assert.match(wx, /CNY|¥|人民币|元/, `${lang}: pay.wechat must say the buyer is charged in CNY`);
+    assert.equal(I[lang]['pay.paddle'], undefined, `${lang}: dead Paddle label must stay deleted`);
+    assert.equal(I[lang]['pay.wechat'], undefined, `${lang}: dead WeChat label must stay deleted`);
+    assert.equal(I[lang]['pay.paddleLocal'], undefined, `${lang}: dead currency-note label must stay deleted`);
+    assert.equal(I[lang]['pay.sCard'], undefined, `${lang}: dead per-method label must stay deleted`);
+    const plain = I[lang]['pay.stripe'];
+    const pp = I[lang]['pay.stripePaypal'];
+    assert.ok(plain && pp, `${lang} lacks the Stripe button labels`);
+    assert.match(pp, /paypal/i, `${lang}: the PayPal-live label must name PayPal`);
+    assert.equal(/wechat|微信|alipay|支付宝/i.test(pp), false,
+      `${lang}: the button must not name WeChat/Alipay - Stripe shows them itself once approved`);
+    assert.notEqual(plain, pp, `${lang}: the two Stripe labels must differ`);
+    assert.ok(I[lang]['pay.note'], `${lang} lacks pay.note`);
   }
 });
 
@@ -153,47 +159,16 @@ test('favicon and apple-touch icons are shipped and referenced', () => {
   }
 });
 
-/* The backend picks a settlement currency per visitor so that WeChat Pay can appear at all
-   (Paddle requires CNY/USD, not just a Chinese address). The dialog promises that currency, so the
-   placeholder must survive in every pack — a translation that drops {c} silently prints "{c}". */
-/* The four single-method Stripe buttons (pay.sCard/sPaypal/sAlipay/sWechat) are each shown only
-   when the backend's stripe_methods map says Stripe approved that method, so each label only has to
-   name its own method and Stripe - the gating (not the wording) is what keeps unapproved methods out.
-   The legacy combined pay.stripePaypal label stays for old backends and must still name PayPal. */
-test('each single-method Stripe label names exactly the method it can deliver', () => {
-  const I = packs();
-  const need = { 'pay.sCard': /card|银行卡|karte|kart|карта|картка|karta|thẻ|البطاقة/i,
-                 'pay.sPaypal': /paypal/i, 'pay.sAlipay': /alipay|支付宝/i,
-                 'pay.sWechat': /wechat|微信/i };
-  for (const lang of LANGS) {
-    for (const [key, re] of Object.entries(need)) {
-      const label = I[lang][key];
-      assert.ok(label, `${lang} lacks ${key}`);
-      assert.match(label, re, `${lang}: ${key} must name its method`);
-      assert.match(label, /stripe/i, `${lang}: ${key} must say it goes through Stripe`);
-    }
-    const legacy = I[lang]['pay.stripePaypal'];
-    assert.match(legacy, /paypal/i, `${lang}: the legacy label must name PayPal`);
-    assert.equal(/wechat|微信/i.test(legacy), false, `${lang}: the legacy combined label must not promise WeChat`);
-  }
-});
-
-test('the dialog gates every Stripe button on the backend capability map', () => {
+/* The dialog renders exactly one payment button (data-act="pay" data-provider="stripe") and no
+   per-method / per-currency entries: Stripe's checkout lists card + PayPal itself today and adds
+   Alipay/WeChat on its own once approved. The note is the plain pay.note - no currency hint. */
+test('the dialog renders one Stripe button, no Paddle, no method or currency entries', () => {
   const app = read('app.js');
-  for (const m of ['sm.card', 'sm.paypal', 'sm.alipay', 'sm.wechat_pay'])
-    assert.ok(app.includes(m), `showUnlock must gate on ${m}`);
-  assert.ok(app.includes('data-method="wechat_pay"'), 'the WeChat button must carry its method');
-  assert.ok(app.includes('!(sm && sm.wechat_pay)'), 'the Paddle WeChat fallback must yield once Stripe approves WeChat');
-});
-
-test('the local-currency note keeps its placeholder in every language', () => {
-  const I = packs();
-  const base = I.en['pay.paddleLocal'];
-  for (const lang of LANGS) {
-    const line = I[lang]['pay.paddleLocal'];
-    assert.ok(line, `${lang}: pay.paddleLocal is missing`);
-    if (lang !== "en") assert.notEqual(line, base, `${lang}: pay.paddleLocal was left in English`);
-    assert.match(line, /\{c\}/, `${lang}: pay.paddleLocal must interpolate the currency as {c}`);
-    assert.match(line, /WeChat|微信/i, `${lang}: pay.paddleLocal should explain the WeChat link`);
-  }
+  const dialog = app.slice(app.indexOf('function showUnlock'), app.indexOf('function downscale'));
+  assert.equal((dialog.match(/data-act="pay"/g) || []).length, 1, 'exactly one payment button in the dialog');
+  assert.ok(dialog.includes('data-provider="stripe"'), 'that button goes to Stripe');
+  assert.equal(/data-provider="paddle"/.test(dialog), false, 'no Paddle button may come back');
+  assert.equal(/data-method=/.test(dialog), false, 'no per-method button: Stripe lists methods itself');
+  assert.equal(/data-currency=/.test(dialog), false, 'no per-currency button any more');
+  assert.equal(/paddleLocal|stripe_methods/.test(dialog), false, 'no dead gating code may come back');
 });
