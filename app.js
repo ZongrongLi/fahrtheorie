@@ -77,7 +77,70 @@
   }
 
   function load(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v && typeof v === "object" ? Object.assign(d, v) : d; } catch (e) { return d; } }
-  function saveState() { try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e) {} fsScheduleWrite(); }
+  function saveState() { try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e) {} fsScheduleWrite(); progPush(); }
+  /* ---------------- progress cloud sync ----------------
+     登录后做题进度跟着账号走：q（含错题/书签）按 at 取新，notes 按 at 取新，
+     days 按天取大，goal 按 savedAt 取新 —— 多设备同时用也不丢。tr/ai 缓存
+     纯本地加速不同步。写侧 8 秒防抖 + 切后台即时刷，后端还有 5 秒限流兜底。 */
+  var progTimer = null, progWipe = false, progPushedSig = "", progSavedAt = 0;
+  function progLogged() { return !!(typeof apiRoot === "function" && apiRoot() && prefs.token); }
+  function progSerialize() {
+    var q = {}, notes = {}, days = {}, k, e;
+    for (k in state.q) { e = state.q[k];
+      if (e && (e.a > 0 || e.w > 0 || e.r > 0 || e.wrong || e.bm))
+        q[k] = { a: e.a | 0, w: e.w | 0, r: e.r | 0, last: e.last === true, wrong: e.wrong === true, at: e.at | 0 };
+      if (e && e.bm && q[k]) q[k].bm = true; }
+    for (k in state.notes) { e = state.notes[k];
+      if (e && e.text) notes[k] = { text: String(e.text).slice(0, 2000), at: e.at | 0 }; }
+    for (k in state.days) { if ((state.days[k] | 0) > 0) days[k] = state.days[k] | 0; }
+    return { q: q, notes: notes, days: days, goal: state.goal | 0 || 20 };
+  }
+  function progMerge(srv) {
+    var k, o, c;
+    for (k in (srv.q || {})) { o = state.q[k]; c = srv.q[k]; if (!c) continue;
+      if (!o || ((c.at | 0) >= (o.at | 0))) { state.q[k] = { a: c.a | 0, w: c.w | 0, r: c.r | 0, last: !!c.last, wrong: !!c.wrong, at: c.at | 0 }; if (c.bm) state.q[k].bm = true; } }
+    for (k in (srv.notes || {})) { o = state.notes[k]; c = srv.notes[k]; if (!c) continue;
+      if (!o || ((c.at | 0) >= (o.at | 0))) state.notes[k] = { text: String(c.text || "").slice(0, 2000), at: c.at | 0 }; }
+    for (k in (srv.days || {})) state.days[k] = Math.max(state.days[k] | 0, (srv.days[k] | 0));
+    if ((srv.savedAt | 0) >= progSavedAt) { state.goal = srv.goal | 0 || state.goal; progSavedAt = srv.savedAt | 0; }
+  }
+  function progPush(now) {
+    if (!progLogged()) return;
+    if (typeof clearTimeout === "function") { if (progTimer) clearTimeout(progTimer); progTimer = null; }
+    var run = function () {
+      progTimer = null;
+      var p = progSerialize(), sig = JSON.stringify(p);
+      if (sig === progPushedSig && !progWipe) return;
+      p.savedAt = Date.now(); progSavedAt = p.savedAt;
+      if (progWipe) p.wipe = true;
+      if (typeof fetch !== "function") return;
+      fetch(apiRoot() + "/api/progress", { method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token },
+        body: JSON.stringify(p), keepalive: true })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) { if (j && j.progress) { progPushedSig = sig; progWipe = false; } })
+        .catch(function () {});
+    };
+    if (now) run();
+    else if (typeof setTimeout === "function") progTimer = setTimeout(run, 8000);
+  }
+  function progPull() {
+    if (!progLogged() || typeof fetch !== "function") return;
+    fetch(apiRoot() + "/api/progress", { headers: { Authorization: AUTH_B + prefs.token } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !j.progress) return;
+        progMerge(j.progress);
+        try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e2) {}
+        progPushedSig = ""; progPush(true);   // 本机旧进度（如未登录时刷的）也并上去
+        if (session) rerenderQuiz(); else route();
+      })
+      .catch(function () {});
+  }
+  if (typeof document !== "undefined" && document.addEventListener) {
+    document.addEventListener("pagehide", function () { progPush(true); });
+    document.addEventListener("visibilitychange", function () { if (document.hidden) progPush(true); });
+  }
 
   /* ---------------- file storage (File System Access API + IndexedDB handle) ---------------- */
   var fsHandle = null, fsName = "", fsTimer = null, fsNeedsReconnect = false;
@@ -986,7 +1049,7 @@
       var q = BY[id], a = session.answers[id]; total += q.pt;
       var ok = a && (q.t === "num" ? String(a.val).trim() === String(q.num).trim() : (a.sel.length === q.ans.length && a.sel.every(function (i) { return q.ans.indexOf(i) >= 0; })));
       if (!ok) { err += q.pt; }
-      if (a && (a.sel.length || a.val !== "")) { var st = qState(id); st.a++; st.last = !!ok; if (ok) st.r++; else { st.w++; st.wrong = true; } }
+      if (a && (a.sel.length || a.val !== "")) { var st = qState(id); st.a++; st.at = Date.now(); st.last = !!ok; if (ok) st.r++; else { st.w++; st.wrong = true; } }
     });
     session.err = err; session.total = total; saveState();
   }
@@ -1057,7 +1120,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v77 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v78 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1152,6 +1215,7 @@
     else if (typeof prefs.freeLeft !== "number") prefs.freeLeft = 10;
     savePrefs(); syncUser(); closeModal(); applyTheme(); renderTopbar();
     toast(t("login.ok", { n: quotaLeft() }));
+    progPull();
     if (window.__pendingPay) { window.__pendingPay = false; showUnlock(); return true; }
     if (session) rerenderQuiz(); else route();
     return true;
@@ -1536,12 +1600,12 @@
     if (act === "restart") { var p = session._p || {}; session = null; go("#/practice?c=" + encodeURIComponent(p.c || "ALL") + "&m=" + (p.m || "all") + "&s=rnd"); return; }
     if (act === "wrong-add") {
       var wq = currentQ(); if (!wq) return;
-      var ws = qState(wq.id); ws.wrong = !ws.wrong; saveState();
+      var ws = qState(wq.id); ws.wrong = !ws.wrong; ws.at = Date.now(); saveState();
       rerenderQuiz();
       toast(ws.wrong ? t("quiz.addedWrong") : t("quiz.removedWrong"));
       return;
     }
-    if (act === "bm") { var q = currentQ(); var st = qState(q.id); st.bm = !st.bm; saveState(); rerenderQuiz(); toast(st.bm ? t("quiz.bookmarked") : t("quiz.unbookmarked")); return; }
+    if (act === "bm") { var q = currentQ(); var st = qState(q.id); st.bm = !st.bm; st.at = Date.now(); saveState(); rerenderQuiz(); toast(st.bm ? t("quiz.bookmarked") : t("quiz.unbookmarked")); return; }
     if (act === "savenote") { var qq = currentQ(); var ta = document.querySelector('[data-role="noteta"]'); var txt = ta ? ta.value.trim() : ""; state.notes[qq.id] = { text: txt, at: Date.now() }; saveState(); toast(t("common.saved")); var tg = document.querySelector('[data-role="notetag"]'); if (tg) tg.textContent = txt ? t("common.saved") : t("quiz.noNote"); return; }
     if (act === "reveal-ai") { var pnl = document.querySelector('[data-role="aipanel"]'); if (pnl) { pnl.open = true; var inq = pnl.querySelector('[data-role="aiinput"]'); if (inq) inq.focus(); } return; }
     if (act === "quick") { if (!aiGate()) return; return aiAsk(currentQ(), quickText(parseInt(el.getAttribute("data-q"), 10))); }
@@ -1549,9 +1613,9 @@
     if (act === "ai-again") { if (!aiGate()) return; var qq0 = currentQ(); if (state.ai[qq0.id]) { delete state.ai[qq0.id]; saveState(); } aiHist[qq0.id] = []; rerenderQuiz(); aiGenerate(qq0); return; }
     if (act === "translate") return aiTranslate(currentQ());
     if (act === "random") { go("#/practice?c=ALL&m=all&s=rnd"); return; }
-    if (act === "unwrong") { var id = el.getAttribute("data-id"); var s = qState(id); s.wrong = false; saveState(); route(); toast(t("wrong.mastered")); return; }
+    if (act === "unwrong") { var id = el.getAttribute("data-id"); var s = qState(id); s.wrong = false; s.at = Date.now(); saveState(); route(); toast(t("wrong.mastered")); return; }
     if (act === "export") { exportData(); return; }
-    if (act === "reset") { if (confirm(t("settings.resetConfirm"))) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; saveState(); toast(t("settings.resetDone")); route(); } return; }
+    if (act === "reset") { if (confirm(t("settings.resetConfirm"))) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = Date.now(); progWipe = true; saveState(); toast(t("settings.resetDone")); route(); } return; }
     if (act === "ai-save") { var base = val("ai-base"), key = val("ai-key"), model = "auto"; localStorage.setItem("dtt.ai", JSON.stringify({ base: base, key: key, model: model })); var s2 = document.querySelector('[data-role="ai-status"]'); if (s2) s2.textContent = window.AI.hasLLM() ? t("ai.llmBadge") : t("ai.offlineBadge"); toast(t("settings.aiSaved")); return; }
     if (act === "ai-clear") { localStorage.removeItem("dtt.ai"); document.getElementById("view").innerHTML = vSettings(); toast(t("settings.aiClear")); return; }
     if (act === "pay") { doCheckout(el.getAttribute("data-provider"), el.getAttribute("data-currency"), el.getAttribute("data-method")); return; }
@@ -1578,7 +1642,7 @@
       }
       doLogin(authVal("a-name")); return;
     }
-    if (act === "logout") { prefs.user = ""; prefs.uid = ""; prefs.lic = ""; prefs.token = ""; prefs.serverLeft = null; savePrefs(); syncUser(); try { localStorage.removeItem("dtt.ai"); } catch (e) {} if (session) rerenderQuiz(); else route(); renderTopbar(); toast(t("login.bye")); return; }
+    if (act === "logout") { var hadToken = !!prefs.token; prefs.user = ""; prefs.uid = ""; prefs.lic = ""; prefs.token = ""; prefs.serverLeft = null; savePrefs(); syncUser(); try { localStorage.removeItem("dtt.ai"); } catch (e) {} if (hadToken) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = 0; progPushedSig = ""; try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e2) {} } if (session) rerenderQuiz(); else route(); renderTopbar(); toast(t("login.bye")); return; }
     if (act === "ai-unlock2") { unlockApply(unlockKeyFrom("lk2")); return; }
     if (act === "ai-unlock") { unlockApply(unlockKeyFrom("lkey")); return; }
     if (act === "support") { showSupport(); return; }
@@ -1624,7 +1688,7 @@
     }
     if (e.target.matches('[data-role="import"]')) {
       var f = e.target.files[0]; if (!f) return; var r = new FileReader();
-      r.onload = function () { try { var d = JSON.parse(r.result); if (!d || typeof d !== "object") throw 0; state = Object.assign({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }, d); saveState(); toast(t("settings.importDone")); route(); } catch (err) { toast(t("settings.importFail")); } };
+      r.onload = function () { try { var d = JSON.parse(r.result); if (!d || typeof d !== "object") throw 0; state = Object.assign({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }, d); progSavedAt = Date.now(); progWipe = true; saveState(); toast(t("settings.importDone")); route(); } catch (err) { toast(t("settings.importFail")); } };
       r.readAsText(f);
     }
   });
