@@ -155,7 +155,10 @@
         .catch(function () {});
     };
     if (now) run();
-    else if (typeof setTimeout === "function") progTimer = setTimeout(run, 8000);
+    /* 进度上报防抖 8s → 20s：每次答题都会触发 saveState，8s 一存的话一个连续刷题的人
+       一小时就能写掉几百次 KV（免费额度每天只有 1000 次写）。
+       关标签/切后台仍走 progPush(true) 立即落盘，不会丢。 */
+    else if (typeof setTimeout === "function") progTimer = setTimeout(run, 20000);
   }
   function progPull() {
     if (!progLogged() || typeof fetch !== "function") return;
@@ -1336,7 +1339,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v88 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v89 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
