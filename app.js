@@ -78,30 +78,38 @@
 
   function load(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v && typeof v === "object" ? Object.assign(d, v) : d; } catch (e) { return d; } }
   function saveState() { try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e) {} fsScheduleWrite(); progPush(); }
-  /* ---------------- progress cloud sync ----------------
+  /* ---------------- progress cloud sync（只收 B 照） ----------------
      登录后做题进度跟着账号走：q（含错题/书签）按 at 取新，notes 按 at 取新，
      days 按天取大，goal 按 savedAt 取新 —— 多设备同时用也不丢。tr/ai 缓存
-     纯本地加速不同步。写侧 8 秒防抖 + 切后台即时刷，后端还有 5 秒限流兜底。 */
+     纯本地加速不同步；非 B 照题号不上云（只留本机）。写侧 8 秒防抖 +
+     切后台即时刷，后端还有 5 秒限流兜底。 */
+  function progIsB(id) {   // 与 isClassB 同口径；格式对不上的未知题号按同步处理
+    var m = /^([0-9.]+)-(\d+)/.exec(String(id || ""));
+    if (!m) return true;
+    return m[1].charAt(0) === "1" || m[2].charAt(0) === "1";
+  }
   var progTimer = null, progWipe = false, progPushedSig = "", progSavedAt = 0;
   function progLogged() { return !!(typeof apiRoot === "function" && apiRoot() && prefs.token); }
   function progSerialize() {
     var q = {}, notes = {}, days = {}, k, e;
     for (k in state.q) { e = state.q[k];
+      if (!progIsB(k)) continue;   // 非 B 照不上云
       if (e && (e.a > 0 || e.w > 0 || e.r > 0 || e.wrong || e.bm)) {
         q[k] = { a: e.a | 0, w: e.w | 0, r: e.r | 0, at: e.at | 0 };
         if (e.last === true) q[k].last = true;    // false 不上传，读侧缺省即 false
         if (e.wrong === true) q[k].wrong = true;
         if (e.bm) q[k].bm = true; } }
     for (k in state.notes) { e = state.notes[k];
+      if (!progIsB(k)) continue;   // 非 B 照不上云
       if (e && e.text) notes[k] = { text: String(e.text).slice(0, 2000), at: e.at | 0 }; }
     for (k in state.days) { if ((state.days[k] | 0) > 0) days[k] = state.days[k] | 0; }
     return { q: q, notes: notes, days: days, goal: state.goal | 0 || 20 };
   }
   function progMerge(srv) {
     var k, o, c;
-    for (k in (srv.q || {})) { o = state.q[k]; c = srv.q[k]; if (!c) continue;
+    for (k in (srv.q || {})) { o = state.q[k]; c = srv.q[k]; if (!c || !progIsB(k)) continue;
       if (!o || ((c.at | 0) >= (o.at | 0))) { state.q[k] = { a: c.a | 0, w: c.w | 0, r: c.r | 0, last: !!c.last, wrong: !!c.wrong, at: c.at | 0 }; if (c.bm) state.q[k].bm = true; } }
-    for (k in (srv.notes || {})) { o = state.notes[k]; c = srv.notes[k]; if (!c) continue;
+    for (k in (srv.notes || {})) { o = state.notes[k]; c = srv.notes[k]; if (!c || !progIsB(k)) continue;
       if (!o || ((c.at | 0) >= (o.at | 0))) state.notes[k] = { text: String(c.text || "").slice(0, 2000), at: c.at | 0 }; }
     for (k in (srv.days || {})) state.days[k] = Math.max(state.days[k] | 0, (srv.days[k] | 0));
     if ((srv.savedAt | 0) >= progSavedAt) { state.goal = srv.goal | 0 || state.goal; progSavedAt = srv.savedAt | 0; }
@@ -1126,7 +1134,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v80 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v81 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {

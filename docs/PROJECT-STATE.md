@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v80**.
+Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v81**.
 
 ## Where things live
 
@@ -288,6 +288,14 @@ never a window where live payments could arrive with nothing to verify them:
    boot-pull pinned). Live verified: throwaway account wrote all 2413 entries in one call (200), then all 4
    of its KV keys were deleted (namespace back to 10 keys, no residue). Worker version `4e57836e`.
 12. **Push-on-empty-cloud (2026-09-21 morning, build v80).** Reviewing the v79 flow once more before going live caught a real hole: when the cloud record is `null`, `progPull()` returned early without pushing, so a browser holding the only copy (the owner's ~50 answered questions) would still never upload on boot. It now pushes local `q`/`notes` up when the cloud is empty, and writes nothing when both sides are empty (no junk records for fresh devices). Progress tests 7 -> **9**. With this, opening the homepage once in the already-logged-in browser is enough to sync.
+13. **Cloud sync narrowed to class B (2026-09-21 morning, build v81).** Owner decision: only the 1264
+   class-B questions sync; non-B progress and notes stay in browser localStorage. Same `progIsB` rule on both
+   sides (Teil 1 or Zusatzstoff 1xx; unparseable ids fail open to sync, never drop). Server drops non-B keys
+   in `cleanProg` and garbage-collects legacy non-B keys in `mergeProg` (no migration needed - KV held zero
+   `prog:` keys). `PROG_Q_MAX` 3000 -> 1600. Measured: a fully answered B catalog is ~68 KB, comfortably
+   inside the cap even with hundreds of notes. Backend tests 145 -> **148**, progress tests 9 -> **10**.
+   Per-question record stays `{a, w, r, at}` plus `true`-only `last`/`wrong`/`bm` - the progress itself is
+   just a few numbers per question and cannot bloat; only note text can, capped at 2000 chars/note.
    Storage estimate for the owner: ~4 KB for 50 answered questions; ~130 KB for a fully answered catalog;
    10k average users ~= tens of MB, a few percent of the free 1 GB KV quota - writes (debounced + 5 s
    throttle) are the only number to watch if traffic grows.

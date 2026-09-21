@@ -197,6 +197,25 @@ test('first login with nothing anywhere writes nothing', async () => {
   assert.equal(P.bodies.filter((b) => b && b.includes('savedAt')).length, 0, 'no empty record for a fresh device');
 });
 
+test('non-B questions never leave the device', async () => {
+  const P = load({ prefs: signedIn });
+  P.context.window.testProg.setState({
+    q: { '1.1.01-001': { a: 2, w: 0, r: 2, last: true, wrong: false, at: 10 },
+         '2.2.03-001': { a: 5, w: 5, r: 0, last: false, wrong: true, at: 11 } },
+    notes: { '1.1.01-001': { text: 'b note', at: 10 }, '2.2.03-001': { text: 'non-b note', at: 11 } },
+    tr: {}, ai: {}, days: {}, goal: 20 });
+  const p = P.context.window.testProg.serialize();
+  assert.equal(p.q['1.1.01-001'].a, 2, 'B progress uploads');
+  assert.equal(p.q['2.2.03-001'], undefined, 'non-B progress stays local');
+  assert.equal(p.notes['1.1.01-001'].text, 'b note', 'B note uploads');
+  assert.equal(p.notes['2.2.03-001'], undefined, 'non-B note stays local');
+  P.context.window.testProg.merge({ q: { '2.2.03-001': { a: 9, w: 0, r: 9, last: true, wrong: false, at: 99999 } },
+    notes: { '2.2.03-001': { text: 'cloud note', at: 99999 } }, days: {}, goal: 20, savedAt: 99999 });
+  const st = P.context.window.testProg.getState();
+  assert.equal(st.q['2.2.03-001'].a, 5, 'cloud non-B must not overwrite local');
+  assert.equal(st.notes['2.2.03-001'].text, 'non-b note', 'cloud non-B note must not come down');
+});
+
 test('login and progress hooks are wired in the app source', () => {
   assert.match(appSource, /progPull\(\);/, 'finishLogin must pull cloud progress');
   assert.match(appSource, /progPush\(\);/, 'saveState must schedule a push');
