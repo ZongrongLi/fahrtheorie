@@ -93,7 +93,7 @@ test('guest checkout offers sign-in instead of hanging on "checking"', () => {
   assert.equal(nodes['pay-loading'].removed, true, 'the endless spinner must be removed');
   assert.match(nodes['pay-btns'].inserted, /data-act="register-open"/);
   assert.match(nodes['pay-btns'].inserted, /data-act="login-open"/);
-  assert.equal(nodes['pay-note'].textContent, context.window.I18N.zh['pay.needLogin']);
+  assert.equal(nodes['pay-note'].textContent, context.window.I18N.en['pay.needLogin']);
   assert.equal(context.window.__pendingPay, true, 'sign-in must resume checkout');
 });
 
@@ -107,7 +107,7 @@ test('signed-in visitors see the real payment providers', async () => {
   assert.equal(calls.length, 1);
   assert.match(calls[0], /\/api\/pay-methods$/);
   assert.match(nodes['pay-btns'].inserted, /data-provider="stripe"/);
-  assert.equal(nodes['pay-note'].textContent, context.window.I18N.zh['pay.note']);
+  assert.equal(nodes['pay-note'].textContent, context.window.I18N.en['pay.note']);
 });
 
 test('the app ships a visible sign-in entry and resumable checkout', () => {
@@ -358,7 +358,7 @@ test('a visitor who will be charged in a local currency is told so before paying
   });
   context.window.testShowUnlock();
   await tick();
-  assert.equal(nodes['pay-note'].textContent, context.window.I18N.zh['pay.note'],
+  assert.equal(nodes['pay-note'].textContent, context.window.I18N.en['pay.note'],
     'Stripe charges the price currency, so the CNY hint must not show');
 });
 
@@ -373,7 +373,7 @@ test('no settlement-currency hint when the buyer pays in the price currency', as
   });
   context.window.testShowUnlock();
   await tick();
-  assert.equal(nodes['pay-note'].textContent, context.window.I18N.zh['pay.note'],
+  assert.equal(nodes['pay-note'].textContent, context.window.I18N.en['pay.note'],
     'a German buyer must not be shown a CNY hint');
 });
 
@@ -516,7 +516,7 @@ test('with PayPal live the single button names PayPal instead of pretending only
   await tick();
   const inserted = nodes['pay-btns'].inserted;
   assert.equal((inserted.match(/data-act="pay"/g) || []).length, 1, 'still one button');
-  assert.match(inserted, new RegExp(context.window.I18N.zh['pay.stripePaypal'].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+  assert.match(inserted, new RegExp(context.window.I18N.en['pay.stripePaypal'].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
     'the button must name PayPal now that Stripe can deliver it');
 });
 

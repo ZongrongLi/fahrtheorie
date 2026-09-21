@@ -60,9 +60,9 @@
     buildIndex();
   }
   var state = load("dtt.state.v1", { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
-  var prefs = load("dtt.prefs", { uiLang: "zh", contentLang: "zhen", theme: "light", explLang: "zh", scope: "b", donateLink: "", donateQR: "", buyUrl: "", lic: "", licBase: "", uid: "", user: "", freeLeft: 10, apiBase: "", token: "", serverLeft: null, googleClientId: "", unlimited: false });
-  if (["zhen", "zh", "en", "de"].indexOf(prefs.contentLang) < 0) prefs.contentLang = "zhen";
-  if (["zh", "en", "de"].indexOf(prefs.explLang) < 0) prefs.explLang = "zh";
+  var prefs = load("dtt.prefs", { uiLang: "en", contentLang: "en", theme: "light", explLang: "en", scope: "b", donateLink: "", donateQR: "", buyUrl: "", lic: "", licBase: "", uid: "", user: "", freeLeft: 10, apiBase: "", token: "", serverLeft: null, googleClientId: "", unlimited: false });
+  if (["zhen", "zh", "en", "de"].indexOf(prefs.contentLang) < 0) prefs.contentLang = "en";
+  if (["zh", "en", "de"].indexOf(prefs.explLang) < 0) prefs.explLang = "en";
   if (["b", "all"].indexOf(prefs.scope) < 0) prefs.scope = "b";
   ["apiBase", "googleClientId", "buyUrl", "donateLink", "donateQR"].forEach(function (k) {
     if (!prefs[k] && OWNER[k]) prefs[k] = OWNER[k];
@@ -254,7 +254,7 @@
   ];
   var RTL_LANGS = { ar: 1, fa: 1, he: 1, ur: 1 };
   function langKnown(code) { for (var i = 0; i < UI_LANGS.length; i++) if (UI_LANGS[i][0] === code) return true; return false; }
-  if (!langKnown(prefs.uiLang)) prefs.uiLang = "zh";
+  if (!langKnown(prefs.uiLang)) prefs.uiLang = "en";
   function contentLangs() {
     var c = prefs.contentLang;
     if (c === "zhen") return ["zh", "en"];
@@ -1257,7 +1257,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v82 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v83 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1815,7 +1815,7 @@
     if (e.target.matches("select[data-lang]")) {
       var kind = e.target.getAttribute("data-lang");
       prefs[kind === "ui" ? "uiLang" : "contentLang"] = e.target.value;
-      if (!langKnown(prefs.uiLang)) prefs.uiLang = "zh";
+      if (!langKnown(prefs.uiLang)) prefs.uiLang = "en";
       if (kind !== "ui") window.__explManual = false;
       savePrefs(); aiHist = {}; applyTheme(); buildIndex();
       toast(kind === "ui" ? langPickerName(prefs.uiLang) : t("lang." + prefs.contentLang));
@@ -1868,7 +1868,7 @@
     var root = document.documentElement;
     if (!root || !root.setAttribute) return;
     root.setAttribute("data-theme", prefs.theme);
-    root.setAttribute("lang", prefs.uiLang || "zh");
+    root.setAttribute("lang", prefs.uiLang || "en");
     root.setAttribute("dir", RTL_LANGS[prefs.uiLang] ? "rtl" : "ltr");
   }
   function localizeStatic() {

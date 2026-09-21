@@ -217,6 +217,14 @@ test('the quiz-language label says quiz in every pack', () => {
   }
 });
 
+test('fresh visitors default to English, not Chinese', () => {
+  const app = read('app.js');
+  assert.ok(app.includes('{ uiLang: "en", contentLang: "en"'), 'fresh prefs must default site and quiz language to en');
+  assert.ok(app.includes('explLang: "en"'), 'fresh prefs must default explanation language to en');
+  assert.equal(/prefs\.uiLang = "zh"/.test(app), false, 'no zh fallback for site language may come back');
+  assert.equal(/prefs\.contentLang = "zhen"/.test(app), false, 'no zhen fallback for quiz language may come back');
+});
+
 test('the dialog renders one Stripe button, no Paddle, no method or currency entries', () => {
   const app = read('app.js');
   const dialog = app.slice(app.indexOf('function showUnlock'), app.indexOf('function downscale'));
