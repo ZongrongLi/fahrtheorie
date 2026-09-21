@@ -392,3 +392,16 @@ html[dir="rtl"] .bubble.md,html[dir="rtl"] .md{text-align:right;}
 .disc-composer,.disc-replybox{margin-top:8px;}
 .disc-composer textarea,.disc-replybox textarea{width:100%;box-sizing:border-box;border:1.5px solid var(--line);border-radius:var(--r);padding:8px 10px;font:13px/1.5 var(--sans);background:var(--surface);color:var(--ink);resize:vertical;}
 .disc-composer textarea:focus,.disc-replybox textarea:focus{border-color:var(--accent);outline:none;}
+
+/* ---------- notifications bell + panel (v86) ---------- */
+.iconbtn.bell{position:relative;}
+.iconbtn .nbadge{position:absolute;top:-5px;right:-5px;min-width:17px;height:17px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;line-height:17px;text-align:center;padding:0 4px;box-sizing:border-box;}
+.notif-panel{position:fixed;top:56px;right:10px;width:min(350px,94vw);max-height:62vh;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);z-index:80;padding:6px 0;}
+.notif-head{display:flex;align-items:center;justify-content:space-between;padding:6px 12px;border-bottom:1px solid var(--line-2);}
+.notif-item{padding:9px 12px;border-bottom:1px solid var(--line-2);cursor:pointer;}
+.notif-item:last-child{border-bottom:none;}
+.notif-item:hover{background:var(--surface-2);}
+.notif-item.unread{background:var(--accent-ink,#fff);background:color-mix(in srgb,var(--accent) 8%,var(--surface));}
+.notif-text{font-size:13.5px;line-height:1.5;word-break:break-word;}
+.notif-meta{display:flex;align-items:center;justify-content:space-between;margin-top:4px;font-size:12px;}
+.linklike{color:var(--accent);font-weight:600;}

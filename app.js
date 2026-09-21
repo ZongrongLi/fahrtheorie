@@ -17,6 +17,7 @@
     spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
     chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
+    bell: '<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"/><path d="M10 20a2 2 0 0 0 4 0"/>',
     left: '<path d="M15 6l-6 6 6 6"/>',
     right: '<path d="m9 6 6 6-6 6"/>',
     img: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-5 4 4 3-3 4 4"/>',
@@ -958,7 +959,7 @@
     var n = e.list ? e.list.length : 0;
     var composer = (apiRoot() && prefs.token)
       ? '<div class="disc-composer"><textarea data-role="discta" rows="2" placeholder="' + esc(t("discuss.placeholder")) + '"></textarea>' +
-        '<div class="panel-actions"><button class="btn small primary" data-act="dis-post" data-qid="' + esc(qid) + '">' + esc(t("discuss.post")) + '</button></div></div>'
+        '<div class="panel-actions"><button class="btn small primary" data-act="dis-post" data-qid="' + esc(qid) + '">' + esc(t("discuss.post")) + '</button></div>' + '<p class="fineprint">' + esc(t("discuss.mentionHint")) + '</p></div>'
       : '<p class="muted">' + esc(t("discuss.loginHint")) + '</p>';
     return '<details class="panel" data-role="discpanel">' +
       '<summary>' + ic("chat") + esc(t("discuss.title")) + '<span class="muted" data-role="discnt">' + (n ? esc(t("discuss.count", { n: n })) : "") + '</span></summary>' +
@@ -1009,8 +1010,86 @@
         e.list = e.list || []; e.list.push(res.j.comment); e.replyTo = null;
         discussPaint(qid);
         try { var ta2 = document.querySelector('[data-qid="' + qid + '"] [data-role="' + taRole + '"]'); if (ta2) ta2.value = ""; } catch (err2) {}
-        toast(t("common.saved"));
+        if (res.j && res.j.notified) toast(t("notif.sent", { n: res.j.notified }));
+        else toast(t("common.saved"));
+        notifFetch(true);
       });
+  }
+  /* ---------------- 站内通知（小铃铛：@艾特 + 注册欢迎语） ----------------
+     后端 GET/POST /api/notifications；KV 键 n:<uid>:<nid>，正常用量下每天几十次读写，
+     连免费 KV 额度的零头都不到。60 秒轮询一次 + 发言成功后拉一次；点条目跳题并展开讨论。 */
+  var notifCache = { list: null, unread: 0, open: false, loading: false, timer: null };
+  function notifFetch(silent) {
+    if (!aiLoggedIn()) { notifCache.list = null; notifCache.unread = 0; notifCache.loading = false; notifPaint(); return; }
+    if (notifCache.loading) return; notifCache.loading = true;
+    fetch(apiRoot() + "/api/notifications", { headers: { Authorization: AUTH_B + prefs.token } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        notifCache.loading = false;
+        if (j && Array.isArray(j.notifications)) { notifCache.list = j.notifications; notifCache.unread = j.unread | 0; }
+        notifPaint();
+      })
+      .catch(function () { notifCache.loading = false; if (!silent) notifPaint(); });
+  }
+  function notifText(n) {
+    if (n.kind === "welcome") return t("notif.welcome");
+    if (n.kind === "mention") return t("notif.mention", { n: n.from || "?", qid: n.qid || "" });
+    return n.kind || "";
+  }
+  function notifPanelHTML() {
+    var items = notifCache.list || [];
+    var rows = items.length ? items.slice(0, 20).map(function (n) {
+      return '<div class="notif-item' + (n.read ? "" : " unread") + '" data-act="notif-open" data-qid="' + esc(n.qid || "") + '" data-id="' + esc(n.id) + '" role="button" tabindex="0">' +
+        '<div class="notif-text">' + esc(notifText(n)) + '</div>' +
+        '<div class="notif-meta"><span class="muted">' + esc(discTime(n.ts)) + '</span>' +
+        (n.qid ? '<span class="linklike">' + esc(t("notif.open")) + ' »</span>' : '') + '</div></div>';
+    }).join("") : '<p class="muted">' + esc(t("notif.empty")) + '</p>';
+    return '<div class="notif-panel" data-role="notifpanel"><div class="notif-head"><b>' + esc(t("notif.title")) + '</b>' +
+      (notifCache.unread ? '<button class="btn small ghost" data-act="notif-read-all">' + esc(t("notif.markAll")) + '</button>' : '') +
+      '</div>' + rows + '</div>';
+  }
+  function notifPaint() {
+    try {
+      var b = document.querySelector('[data-role="bellbadge"]');
+      if (b) { b.textContent = notifCache.unread > 99 ? "99+" : String(notifCache.unread || ""); b.hidden = !notifCache.unread; }
+      var old = document.querySelector('[data-role="notifpanel"]');
+      if (notifCache.open && notifCache.list) {
+        var d = document.createElement("div"); d.innerHTML = notifPanelHTML();
+        if (old) old.replaceWith(d.firstChild); else document.body.appendChild(d.firstChild);
+      } else if (old) old.remove();
+    } catch (e) {}
+  }
+  function notifToggle() {
+    notifCache.open = !notifCache.open;
+    if (notifCache.open && notifCache.list === null) notifFetch();
+    else notifPaint();
+  }
+  function notifReadAll() {
+    if (!aiLoggedIn()) return;
+    fetch(apiRoot() + "/api/notifications", { method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token },
+      body: JSON.stringify({ all: true }) })
+      .then(function () { notifFetch(true); }).catch(function () {});
+  }
+  function notifOpen(qid, nid) {
+    if (!qid) { notifCache.open = false; notifPaint(); return; }
+    if (nid && aiLoggedIn()) {
+      fetch(apiRoot() + "/api/notifications", { method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token },
+        body: JSON.stringify({ read: [nid] }) }).then(function () { notifFetch(true); }).catch(function () {});
+    }
+    notifCache.open = false; notifPaint();
+    go("#/practice?ids=" + encodeURIComponent(qid));
+    setTimeout(function () {
+      try {
+        var card = document.querySelector('[data-qid="' + qid + '"]');
+        if (!card) return;
+        var pnl = card.querySelector('[data-role="discpanel"]');
+        if (pnl) pnl.open = true;
+        discussLoad(qid);
+        card.scrollIntoView();
+      } catch (e) {}
+    }, 350);
   }
   function noteBlock(id, note) {
     return '<details class="panel" data-role="notepanel"' + (note ? " open" : "") + '>' +
@@ -1257,7 +1336,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v85 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v86 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1711,11 +1790,15 @@
     var segBtn = e.target.closest("[data-seg] .seg-btn");
     if (segBtn) { var name = segBtn.closest("[data-seg]").getAttribute("data-seg"); var key = name === "uilang" ? "uiLang" : name === "contentlang" ? "contentLang" : name === "expllang" ? "explLang" : name === "scope" ? "scope" : "theme"; prefs[key] = segBtn.getAttribute("data-val"); if (key === "explLang") { window.__explLang = prefs.explLang; window.__explManual = true; } if (key === "contentLang") window.__explManual = false; savePrefs(); applyTheme(); buildIndex(); if (key === "scope") { applyScope(); route(); } else { document.getElementById("view").innerHTML = vSettings(); } return; }
 
-    var el = e.target.closest("[data-act]:not(select)"); if (!el) return;
+    var el = e.target.closest("[data-act]:not(select)");
+    if (!el) { if (notifCache.open && !e.target.closest('[data-role="notifpanel"]')) { notifCache.open = false; notifPaint(); } return; }
     var act = el.getAttribute("data-act");
     if (act === "ui-lang") { prefs.uiLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; refresh(); return; }
     if (act === "content-lang") { prefs.contentLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; refresh(); return; }
     if (act === "expl-lang") { prefs.explLang = el.getAttribute("data-val"); window.__explLang = prefs.explLang; window.__explManual = true; savePrefs(); aiHist = {}; refresh(); return; }
+    if (act === "notif-toggle") { notifToggle(); return; }
+    if (act === "notif-read-all") { notifReadAll(); return; }
+    if (act === "notif-open") { notifOpen(el.getAttribute("data-qid"), el.getAttribute("data-id")); return; }
     if (act === "toggle-theme") { prefs.theme = prefs.theme === "dark" ? "light" : "dark"; savePrefs(); applyTheme(); renderTopbar(); return; }
     if (act === "opt") return onOpt(parseInt(el.getAttribute("data-i"), 10));
     if (act === "submit") return submitCurrent();
@@ -1912,6 +1995,7 @@
       langPicker("content", t("settings.contentLang"), contentOptions(), prefs.contentLang) + '</span>' +
       '<span class="langwrap"><span class="langtag">' + esc(t("settings.uiLang")) + '</span>' +
       langPicker("ui", t("settings.uiLang"), uiOptions(), prefs.uiLang) + '</span>' +
+      (aiLoggedIn() ? '<button class="iconbtn bell" data-act="notif-toggle" title="' + esc(t("notif.title")) + '" aria-label="' + esc(t("notif.title")) + '">' + ic("bell") + '<span class="nbadge" data-role="bellbadge" hidden></span></button>' : "") +
       '<button class="iconbtn" data-act="toggle-theme" title="' + esc(t("settings.theme")) + '" aria-label="' + esc(t("settings.theme")) + '">' + ic(prefs.theme === "dark" ? "sun" : "moon") + '</button>';
   }
   function refresh() {
@@ -1945,6 +2029,8 @@
     handlePaidReturn();
     window.__dttAfterAI = refreshQuota;
     if (apiRoot() && prefs.token) { applyServerAI(); refreshQuota(); progPull(); }  // 已登录直接同步：光刷新不重登也要拉云端（v79 补）
+    notifFetch(true);
+    if (!notifCache.timer) notifCache.timer = setInterval(function () { notifFetch(true); }, 60000);
     setTimeout(imgCacheWarm, 800);
     setTimeout(vidWarm, 12000);
     setTimeout(function(){ reportProgress(true); }, 13000);
