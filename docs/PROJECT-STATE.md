@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-20 (Europe/Berlin). Live build: **v77**.
+Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v79**.
 
 ## Where things live
 
@@ -270,6 +270,26 @@ never a window where live payments could arrive with nothing to verify them:
    Storage estimate: ~500 bytes/comment -> 10 comments x 2413 questions ~= 12 MB, ~1% of the free 1 GB KV
    quota; reads/writes are nowhere near the free daily limits at current traffic. Front-end UI (thread view,
    composer, i18n) is still open.
+10. **Progress cloud sync (2026-09-21 morning, build v78, commit `c7b0675`).** Quiz progress now follows
+   the account across devices: new KV key `prog:<uid>` = `{q, notes, days, goal, savedAt}`; `GET /api/progress`
+   (Bearer) reads, `POST /api/progress` merges by timestamp (`q`/`notes` newer `at` wins, `days` takes max,
+   `goal` takes newer `savedAt`) with a 5 s server-side write throttle and a 128 KB cap. The client debounces
+   pushes 8 s, flushes on `pagehide`/`visibilitychange`, pulls on login, and never uploads the `tr`/`ai`
+   caches. Logout with a backend account wipes local state so the next login does not inherit it; local-only
+   guests keep theirs. Backend tests 125 -> **141**, new `tests/progress.test.cjs` 5/5. Why this exists: progress
+   lived only in `localStorage`, so switching accounts kept the old progress and a second device started empty.
+11. **Sync on boot + 256 KB cap (2026-09-21 morning, build v79, commit `fe534a5`).** v78 only pulled on a fresh
+   login, so an already-logged-in browser (the common case) never pushed - the cloud stayed empty and the
+   owner's ~50 locally answered questions never arrived. `boot()` now calls `progPull()` whenever a token
+   exists. Second find, verified by measurement: a full 2413-question record is ~192 KB, over the 128 KB cap,
+   so completionists would have synced nothing (silent 413). The cap is now 256 KB and `false` valued
+   `last`/`wrong` flags are no longer stored or uploaded (readers treat missing as false; measured full
+   record is now ~127 KB). Backend tests 141 -> **145**, progress tests 5 -> **7** (full-catalog write +
+   boot-pull pinned). Live verified: throwaway account wrote all 2413 entries in one call (200), then all 4
+   of its KV keys were deleted (namespace back to 10 keys, no residue). Worker version `4e57836e`.
+   Storage estimate for the owner: ~4 KB for 50 answered questions; ~130 KB for a fully answered catalog;
+   10k average users ~= tens of MB, a few percent of the free 1 GB KV quota - writes (debounced + 5 s
+   throttle) are the only number to watch if traffic grows.
 4. **Payout bank decision (2026-09-20 evening): keep Stripe as is.** The dashboard's money-management
    page shows the payout account is Revolut ending 7724 (EUR, default) - found at
    Settings -> "Linked accounts and payouts" -> `/settings/money-management` (the older guesses
