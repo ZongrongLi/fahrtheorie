@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v82**.
+Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v83**.
 
 ## Where things live
 
@@ -320,6 +320,16 @@ so I never saw a single page; Chrome suspends background tabs, so reading an exi
 `/account_details`, `/settings/account/bank_accounts`) bounce to `/dashboard`. Blind to the visuals, I
 burned a lot of turns guessing selectors and then drew the wrong PayPal conclusion from the API.
 **For any heavy React admin, ask for a screenshot first.**
+
+## v83: English by default, price back to EUR 5.00
+
+Fresh visitors now get English everywhere: site language, quiz language and explanation language all
+default to en (was zh / zhen / zh). Saved preferences of existing users are untouched - only the
+first-visit defaults and the invalid-value fallbacks changed. Five startup tests that asserted exact
+Chinese strings against default prefs moved to the en pack; one new legal test pins the English
+defaults so they cannot silently flip back. PRICE_CENTS is back to 500 (EUR 5.00) now that testing
+is done. Commit 09d222f, Worker 39a4a614. Backend 151/151; front end startup 36 + legal 18 +
+ai-lang 6 + progress 11, all green.
 
 ## v82: discussion replies UI + per-user 1KB note budget
 
