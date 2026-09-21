@@ -149,9 +149,33 @@ test('leaving the page flushes progress immediately instead of waiting for the d
   assert.ok(P.listeners.pagehide && P.listeners.pagehide.length, 'pagehide flush must be registered');
   P.listeners.pagehide.forEach((fn) => fn());
   await tick();
-  const idx = P.calls.findIndex((c) => /\/api\/progress$/.test(c) && (P.bodies[P.calls.indexOf(c)] || '').includes('savedAt'));
+  const idx = P.calls.findIndex((c, i) => /\/api\/progress$/.test(c) && (P.bodies[i] || '').includes('savedAt'));
   assert.ok(idx >= 0, 'exactly one immediate push, no polling loop');
   assert.equal(JSON.parse(P.bodies[idx]).q['1.1.01-001'].a, 1);
+});
+
+test('serialize drops false last/wrong so a full catalog fits the server cap', () => {
+  const P = load({ prefs: signedIn });
+  const q = {};
+  for (let i = 0; i < 2413; i++) q['1.1.01-' + (1000 + i)] = { a: 3, w: 1, r: 2, last: i % 2 === 0, wrong: i % 5 === 0, at: 5000 + i };
+  P.context.window.testProg.setState({ q, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  const p = P.context.window.testProg.serialize();
+  assert.equal(p.q['1.1.01-1001'].last, undefined, 'false last must not be uploaded');
+  assert.equal(p.q['1.1.01-1001'].wrong, undefined, 'false wrong must not be uploaded');
+  assert.equal(p.q['1.1.01-1000'].wrong, true, 'true wrong must survive');
+  assert.ok(JSON.stringify(p).length < 262144, 'full upload must fit the 256KB cap');
+});
+
+test('an already-logged-in boot pulls cloud progress without a fresh login', async () => {
+  const cloud = { q: { '1.1.01-002': { a: 4, w: 0, r: 4, last: true, wrong: false, at: 9000 } },
+    notes: {}, days: {}, goal: 20, savedAt: 9000 };
+  const P = load({ prefs: signedIn, progress: cloud,
+    ls: { 'dtt.state.v1': JSON.stringify({ q: { '1.1.01-001': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 100 } },
+      notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }) } });
+  await tick();
+  const st = P.context.window.testProg.getState();
+  assert.equal(st.q['1.1.01-002'].a, 4, 'cloud entry arrives on boot');
+  assert.equal(st.q['1.1.01-001'].a, 1, 'local entry survives the boot merge');
 });
 
 test('login and progress hooks are wired in the app source', () => {

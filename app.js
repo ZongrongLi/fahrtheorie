@@ -87,9 +87,11 @@
   function progSerialize() {
     var q = {}, notes = {}, days = {}, k, e;
     for (k in state.q) { e = state.q[k];
-      if (e && (e.a > 0 || e.w > 0 || e.r > 0 || e.wrong || e.bm))
-        q[k] = { a: e.a | 0, w: e.w | 0, r: e.r | 0, last: e.last === true, wrong: e.wrong === true, at: e.at | 0 };
-      if (e && e.bm && q[k]) q[k].bm = true; }
+      if (e && (e.a > 0 || e.w > 0 || e.r > 0 || e.wrong || e.bm)) {
+        q[k] = { a: e.a | 0, w: e.w | 0, r: e.r | 0, at: e.at | 0 };
+        if (e.last === true) q[k].last = true;    // false 不上传，读侧缺省即 false
+        if (e.wrong === true) q[k].wrong = true;
+        if (e.bm) q[k].bm = true; } }
     for (k in state.notes) { e = state.notes[k];
       if (e && e.text) notes[k] = { text: String(e.text).slice(0, 2000), at: e.at | 0 }; }
     for (k in state.days) { if ((state.days[k] | 0) > 0) days[k] = state.days[k] | 0; }
@@ -1120,7 +1122,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v78 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v79 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1803,7 +1805,7 @@
     syncUser();
     handlePaidReturn();
     window.__dttAfterAI = refreshQuota;
-    if (apiRoot() && prefs.token) { applyServerAI(); refreshQuota(); }
+    if (apiRoot() && prefs.token) { applyServerAI(); refreshQuota(); progPull(); }  // 已登录直接同步：光刷新不重登也要拉云端（v79 补）
     setTimeout(imgCacheWarm, 800);
     setTimeout(vidWarm, 12000);
     setTimeout(function(){ reportProgress(true); }, 13000);
