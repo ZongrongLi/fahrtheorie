@@ -321,6 +321,33 @@ so I never saw a single page; Chrome suspends background tabs, so reading an exi
 burned a lot of turns guessing selectors and then drew the wrong PayPal conclusion from the API.
 **For any heavy React admin, ask for a screenshot first.**
 
+## v86: notification bell (@mentions + welcome), 5s comment window, AI daily cap
+
+Three asks from the owner in one release. (1) The 20s comment throttle kept biting normal
+replies, so `COMMENT_WINDOW_MS` is now 5s - still stops script spam, no longer punishes humans.
+(2) @mentions plus a message system, kept minimal on purpose: new keys `n:<uid>:<nid>`
+`{id,kind,from,qid,cid,ts,read}`, kinds `welcome` (one per fresh registration, all three signup
+paths) and `mention` (exact-email match in comment text, max 5 targets, no self-pings, failures
+never block posting). `GET /api/notifications` returns newest-first 50 + unread count;
+`POST /api/notifications` takes `{all:true}` or `{read:[ids]}` (prefix-locked to your own uid,
+so marking someone else's id marks nothing). Front end: bell in the topbar (logged in only),
+unread badge, dropdown panel, click jumps to `#/practice?ids=<qid>` and opens the discussion,
+60s poll plus a pull after every post. Eight new i18n keys x 10 packs, parity test green.
+Normal traffic is tens of KV reads/writes a day - noise against the free quota.
+(3) AI cost guardrails, no anti-sybil (owner: let them farm, copying to free sites is easier
+anyway): the proxy no longer lets the client pick the model (always `UPSTREAM_MODEL`),
+`max_tokens` is clamped to 1500, and a per-user daily counter `ai:<uid>:<date>` caps everyone -
+paid included - at `AI_DAY_MAX` (default 100/day; wrangler.toml). The math: a typical answer is
+~600 in + ~400 out ≈ ¥0.0014, so 100/day bounds one account to ~¥0.4/day (€0.05); 1000/day
+would be ~€0.5/day, which is why the default is 100, not 1000. Free 10 total unchanged.
+Backend `node --test test.mjs` 165/165 (was 151, +14: welcome/mention/read/self-ping/stranger
+isolation, 6s-post-passes rate proof, day-cap 429 with env override, model/max_tokens clamp).
+Front end startup 36 + legal 18 + ai-lang 6 + progress 11 + new notif 5, all green.
+Live verified on Worker `819ac67b`: throwaway regs got the welcome note, `@` produced
+`notified:1` and the mention showed under the recipient's bell, rapid repost still 429.
+KV list lag (~1-2 min) observed on the fresh mention - the 60s poll absorbs it, no fix needed.
+All throwaway keys deleted after, KV back to 16 keys, zero residue. Site commit `86ea1e2`.
+
 ## v85: six retired questions removed, catalog now 2407 (B 1262)
 
 The 2025-04-01 official revision deleted 6 questions
