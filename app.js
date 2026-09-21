@@ -1336,7 +1336,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v87 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v88 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -2067,7 +2067,10 @@
     window.__dttAfterAI = refreshQuota;
     if (apiRoot() && prefs.token) { applyServerAI(); refreshQuota(); progPull(); }  // 已登录直接同步：光刷新不重登也要拉云端（v79 补）
     notifFetch(true);
-    if (!notifCache.timer) notifCache.timer = setInterval(function () { notifFetch(true); }, 60000);
+    /* 通知轮询：免费 KV 额度是每天 10 万读，挂机轮询是最容易烧掉它的地方。
+       后台标签页直接跳过（回到前台会立刻补一次），轮询间隔 2 分钟。 */
+    if (!notifCache.timer) notifCache.timer = setInterval(function () { if (!document.hidden) notifFetch(true); }, 120000);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) notifFetch(true); });
     setTimeout(imgCacheWarm, 800);
     setTimeout(vidWarm, 12000);
     setTimeout(function(){ reportProgress(true); }, 13000);
