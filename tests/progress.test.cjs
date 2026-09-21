@@ -70,6 +70,7 @@ function load({ prefs = {}, progress = null, ls = {} } = {}) {
       return Promise.reject(new Error('unexpected ' + url));
     },
     setTimeout: () => 0, clearTimeout: () => {}, setInterval: () => 0, clearInterval: () => {},
+    TextEncoder, TextDecoder,
     confirm: () => true,
   };
   vm.runInNewContext(i18nSource, context);
@@ -214,6 +215,17 @@ test('non-B questions never leave the device', async () => {
   const st = P.context.window.testProg.getState();
   assert.equal(st.q['2.2.03-001'].a, 5, 'cloud non-B must not overwrite local');
   assert.equal(st.notes['2.2.03-001'].text, 'non-b note', 'cloud non-B note must not come down');
+});
+
+test('notes are capped at 1KB per person, newest wins', () => {
+  const P = load({ prefs: signedIn });
+  P.context.window.testProg.setState({
+    q: {}, notes: { '1.1.01-001': { text: 'x'.repeat(600), at: 1000 },
+      '1.1.01-002': { text: 'y'.repeat(600), at: 2000 } }, tr: {}, ai: {}, days: {}, goal: 20 });
+  const p = P.context.window.testProg.serialize();
+  assert.equal(Object.keys(p.notes).length, 1, 'only the newest note fits in 1KB');
+  assert.equal(p.notes['1.1.01-002'].text, 'y'.repeat(600), 'newest note survives');
+  assert.equal(new TextEncoder().encode(JSON.stringify(p.notes)).length <= 1024, true, 'total stays within budget');
 });
 
 test('login and progress hooks are wired in the app source', () => {

@@ -16,6 +16,7 @@
     bookmark: '<path d="M6 3h12v18l-6-4.5L6 21z"/>',
     spark: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
     search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    chat: '<path d="M4 5h16v11H9l-5 4z"/><path d="M8 9.5h8M8 12.5h5"/>',
     left: '<path d="M15 6l-6 6 6 6"/>',
     right: '<path d="m9 6 6 6-6 6"/>',
     img: '<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="m4 17 5-5 4 4 3-3 4 4"/>',
@@ -90,6 +91,26 @@
   }
   var progTimer = null, progWipe = false, progPushedSig = "", progSavedAt = 0;
   function progLogged() { return !!(typeof apiRoot === "function" && apiRoot() && prefs.token); }
+  var PROG_NOTE_BUDGET = 1024;   // 每人笔记总上限 1KB（UTF-8 字节），与后端同一规则
+  function progUtf8(s) { try { return new TextEncoder().encode(String(s)).length; } catch (e) { return String(s).length; } }
+  function progUtf8cut(s, n) {
+    s = String(s);
+    if (progUtf8(s) <= n) return s;
+    try { return new TextDecoder().decode(new TextEncoder().encode(s).slice(0, n)); }
+    catch (e) { return s.slice(0, n); }
+  }
+  function progFitNotes(notes) {   // 按 at 从新到旧装，旧的被顶掉；最新一条超标也留（截断）
+    var ks = Object.keys(notes || {}).sort(function (a, b) { return ((notes[b] && notes[b].at | 0) - (notes[a] && notes[a].at | 0)); });
+    var out = {}, used = 0, i, k, e, tx;
+    for (i = 0; i < ks.length; i++) {
+      k = ks[i]; e = notes[k]; if (!e || !e.text) continue;
+      tx = String(e.text);
+      if (used + progUtf8(tx) <= PROG_NOTE_BUDGET) { out[k] = { text: tx, at: e.at | 0 }; used += progUtf8(tx); continue; }
+      if (used === 0) out[k] = { text: progUtf8cut(tx, PROG_NOTE_BUDGET), at: e.at | 0 };
+      break;
+    }
+    return out;
+  }
   function progSerialize() {
     var q = {}, notes = {}, days = {}, k, e;
     for (k in state.q) { e = state.q[k];
@@ -103,7 +124,7 @@
       if (!progIsB(k)) continue;   // 非 B 照不上云
       if (e && e.text) notes[k] = { text: String(e.text).slice(0, 2000), at: e.at | 0 }; }
     for (k in state.days) { if ((state.days[k] | 0) > 0) days[k] = state.days[k] | 0; }
-    return { q: q, notes: notes, days: days, goal: state.goal | 0 || 20 };
+    return { q: q, notes: progFitNotes(notes), days: days, goal: state.goal | 0 || 20 };
   }
   function progMerge(srv) {
     var k, o, c;
@@ -112,6 +133,7 @@
     for (k in (srv.notes || {})) { o = state.notes[k]; c = srv.notes[k]; if (!c || !progIsB(k)) continue;
       if (!o || ((c.at | 0) >= (o.at | 0))) state.notes[k] = { text: String(c.text || "").slice(0, 2000), at: c.at | 0 }; }
     for (k in (srv.days || {})) state.days[k] = Math.max(state.days[k] | 0, (srv.days[k] | 0));
+    state.notes = progFitNotes(state.notes);
     if ((srv.savedAt | 0) >= progSavedAt) { state.goal = srv.goal | 0 || state.goal; progSavedAt = srv.savedAt | 0; }
   }
   function progPush(now) {
@@ -838,7 +860,7 @@
 
     var fb = a.submitted ? feedbackBlock(q, a) : "";
 
-    return '<article class="q-card" data-qid="' + esc(q.id) + '">' + meta + text + img + opts + actions + fb + aiBlock(q, a) + noteBlock(q.id, note) + '</article>';
+    return '<article class="q-card" data-qid="' + esc(q.id) + '">' + meta + text + img + opts + actions + fb + aiBlock(q, a) + noteBlock(q.id, note) + discussBlock(q.id) + '</article>';
   }
 
   function feedbackBlock(q, a) {
@@ -890,11 +912,112 @@
     return html;
   }
 
+  /* ---------------- discussion（每题留言板 + 回复线程） ----------------
+     后端早已上线（GET/POST /api/comments，两层线程、20 秒限流、1000 字）。
+     列表按时间排序；回复跟在顶层留言下面（对回复的回复后端自动并过去）；
+     父留言被删剩下的孤儿回复顶格显示。只在练习页出现，考试页不显示。 */
+  var discussCache = {};
+  function discussGet(qid) {
+    return discussCache[qid] || (discussCache[qid] = { list: null, loading: false, failed: false, replyTo: null });
+  }
+  function discTime(ts) {
+    try { var d = new Date(ts); return d.toLocaleDateString() + " " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
+    catch (e) { return ""; }
+  }
+  function discussItemHTML(c, qid, isReply) {
+    return '<div class="disc-item' + (isReply ? " reply" : "") + '">' +
+      '<div class="disc-head"><b>' + esc(c.name) + '</b><span class="muted">' + esc(discTime(c.ts)) + '</span></div>' +
+      '<p class="disc-text">' + esc(c.text).replace(/\n/g, "<br>") + '</p>' +
+      (isReply ? "" : '<button class="btn small ghost" data-act="dis-reply-open" data-qid="' + esc(qid) + '" data-id="' + esc(c.id) + '">' + esc(t("discuss.reply")) + '</button>') +
+      '</div>';
+  }
+  function discussReplyHTML(qid, pid) {
+    return '<div class="disc-replybox"><textarea data-role="disrta" rows="2" placeholder="' + esc(t("discuss.placeholder")) + '"></textarea>' +
+      '<div class="panel-actions"><button class="btn small primary" data-act="dis-reply-send" data-qid="' + esc(qid) + '" data-id="' + esc(pid) + '">' + esc(t("discuss.post")) + '</button>' +
+      '<button class="btn small ghost" data-act="dis-reply-cancel" data-qid="' + esc(qid) + '">' + esc(t("discuss.cancel")) + '</button></div></div>';
+  }
+  function discussListHTML(qid) {
+    var e = discussGet(qid);
+    if (e.failed) return '<p class="muted">' + esc(t("discuss.loadFail")) + '</p>';
+    if (!e.list) return '<p class="muted">' + esc(t("discuss.loading")) + '</p>';
+    if (!e.list.length) return '<p class="muted">' + esc(t("discuss.empty")) + '</p>';
+    var byId = {}, i, j;
+    for (i = 0; i < e.list.length; i++) byId[e.list[i].id] = true;
+    var out = [];
+    for (i = 0; i < e.list.length; i++) {
+      var c = e.list[i];
+      if (c.parent && byId[c.parent]) continue;   // 有主的回复跟主贴走
+      out.push(discussItemHTML(c, qid, false));
+      for (j = 0; j < e.list.length; j++) if (e.list[j].parent === c.id) out.push(discussItemHTML(e.list[j], qid, true));
+      if (e.replyTo === c.id) out.push(discussReplyHTML(qid, c.id));
+    }
+    return out.join("");
+  }
+  function discussBlock(qid) {
+    var e = discussGet(qid);
+    var n = e.list ? e.list.length : 0;
+    var composer = (apiRoot() && prefs.token)
+      ? '<div class="disc-composer"><textarea data-role="discta" rows="2" placeholder="' + esc(t("discuss.placeholder")) + '"></textarea>' +
+        '<div class="panel-actions"><button class="btn small primary" data-act="dis-post" data-qid="' + esc(qid) + '">' + esc(t("discuss.post")) + '</button></div></div>'
+      : '<p class="muted">' + esc(t("discuss.loginHint")) + '</p>';
+    return '<details class="panel" data-role="discpanel">' +
+      '<summary>' + ic("chat") + esc(t("discuss.title")) + '<span class="muted" data-role="discnt">' + (n ? esc(t("discuss.count", { n: n })) : "") + '</span></summary>' +
+      '<div data-role="disclist">' + discussListHTML(qid) + '</div>' + composer +
+      '</details>';
+  }
+  function discussLoad(qid) {
+    if (!qid || typeof fetch !== "function" || !apiRoot()) return;
+    var e = discussGet(qid);
+    if (e.loading || e.list) return;
+    e.loading = true;
+    try {
+      fetch(apiRoot() + "/api/comments?qid=" + encodeURIComponent(qid))
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (j) {
+          e.loading = false;
+          if (j && Array.isArray(j.comments)) { e.list = j.comments; e.failed = false; }
+          else e.failed = true;
+          discussPaint(qid);
+        })
+        .catch(function () { e.loading = false; e.failed = true; discussPaint(qid); });
+    } catch (err) { e.loading = false; }
+  }
+  function discussPaint(qid) {
+    try {
+      var box = document.querySelector('[data-qid="' + qid + '"] [data-role="disclist"]');
+      if (box) box.innerHTML = discussListHTML(qid);
+      var badge = document.querySelector('[data-qid="' + qid + '"] [data-role="discnt"]');
+      if (badge) { var e = discussGet(qid); badge.textContent = e.list ? t("discuss.count", { n: e.list.length }) : ""; }
+    } catch (err) {}
+  }
+  function discussPost(qid, parent, taRole) {
+    var ta = null;
+    try { ta = document.querySelector('[data-qid="' + qid + '"] [data-role="' + taRole + '"]'); } catch (err) {}
+    var txt = ta ? String(ta.value || "").trim() : "";
+    if (!txt) return;
+    if (!apiRoot() || !prefs.token) { showLogin(); return; }
+    fetch(apiRoot() + "/api/comments", { method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token },
+      body: JSON.stringify({ qid: qid, text: txt.slice(0, 1000), parent: parent || "" }) })
+      .then(function (r) { return r.json().then(function (j) { return { s: r.status, j: j }; }); })
+      .catch(function () { return { s: 0, j: null }; })
+      .then(function (res) {
+        if (res.s === 401) { showLogin(); return; }
+        if (res.s === 429) { toast(t("discuss.tooFast")); return; }
+        if (!res.j || !res.j.comment) { toast((res.j && res.j.error) || t("discuss.fail")); return; }
+        var e = discussGet(qid);
+        e.list = e.list || []; e.list.push(res.j.comment); e.replyTo = null;
+        discussPaint(qid);
+        try { var ta2 = document.querySelector('[data-qid="' + qid + '"] [data-role="' + taRole + '"]'); if (ta2) ta2.value = ""; } catch (err2) {}
+        toast(t("common.saved"));
+      });
+  }
   function noteBlock(id, note) {
     return '<details class="panel" data-role="notepanel"' + (note ? " open" : "") + '>' +
       '<summary>' + ic("note") + esc(t("quiz.notes")) + '<span class="muted" data-role="notetag">' + (note ? esc(t("common.saved")) : esc(t("quiz.noNote"))) + '</span></summary>' +
       '<textarea data-role="noteta" rows="3" placeholder="' + esc(t("quiz.addNote")) + '">' + esc(note) + '</textarea>' +
       '<div class="panel-actions"><button class="btn small primary" data-act="savenote">' + esc(t("quiz.save")) + '</button></div>' +
+      '<p class="muted fineprint">' + esc(t("quiz.noteBudget")) + '</p>' +
       '</details>';
   }
 
@@ -1020,7 +1143,7 @@
     else a.sel = [i];
     rerenderQuiz();
   }
-  function rerenderQuiz() { var app = document.getElementById("view"); app.innerHTML = session.mode === "exam" ? vExam() : vQuiz(); if (session.mode !== "exam") preloadNeighbours(); mountMedia(); }
+  function rerenderQuiz() { var app = document.getElementById("view"); app.innerHTML = session.mode === "exam" ? vExam() : vQuiz(); if (session.mode !== "exam") preloadNeighbours(); mountMedia(); try { if (session.mode !== "exam" && session.ids[session.i]) discussLoad(session.ids[session.i]); } catch (e) {} }
 
   /* ---------------- exam ---------------- */
   function vExamHome() {
@@ -1134,7 +1257,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v81 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v82 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1620,7 +1743,11 @@
       return;
     }
     if (act === "bm") { var q = currentQ(); var st = qState(q.id); st.bm = !st.bm; st.at = Date.now(); saveState(); rerenderQuiz(); toast(st.bm ? t("quiz.bookmarked") : t("quiz.unbookmarked")); return; }
-    if (act === "savenote") { var qq = currentQ(); var ta = document.querySelector('[data-role="noteta"]'); var txt = ta ? ta.value.trim() : ""; state.notes[qq.id] = { text: txt, at: Date.now() }; saveState(); toast(t("common.saved")); var tg = document.querySelector('[data-role="notetag"]'); if (tg) tg.textContent = txt ? t("common.saved") : t("quiz.noNote"); return; }
+    if (act === "dis-post") return discussPost(el.getAttribute("data-qid"), "", "discta");
+    if (act === "dis-reply-open") { var dqo = el.getAttribute("data-qid"), deo = discussGet(dqo); deo.replyTo = (deo.replyTo === el.getAttribute("data-id")) ? null : el.getAttribute("data-id"); discussPaint(dqo); return; }
+    if (act === "dis-reply-send") return discussPost(el.getAttribute("data-qid"), el.getAttribute("data-id"), "disrta");
+    if (act === "dis-reply-cancel") { var dqc = el.getAttribute("data-qid"); discussGet(dqc).replyTo = null; discussPaint(dqc); return; }
+    if (act === "savenote") { var qq = currentQ(); var ta = document.querySelector('[data-role="noteta"]'); var txt = ta ? ta.value.trim() : ""; if (txt) state.notes[qq.id] = { text: txt, at: Date.now() }; else delete state.notes[qq.id]; var _bn = Object.keys(state.notes).length; state.notes = progFitNotes(state.notes); var _kept = state.notes[qq.id]; if (_kept && ta && txt !== _kept.text) ta.value = _kept.text; saveState(); toast(_kept && Object.keys(state.notes).length < _bn ? t("quiz.noteBudget") : t("common.saved")); var tg = document.querySelector('[data-role="notetag"]'); if (tg) tg.textContent = _kept ? t("common.saved") : t("quiz.noNote"); return; }
     if (act === "reveal-ai") { var pnl = document.querySelector('[data-role="aipanel"]'); if (pnl) { pnl.open = true; var inq = pnl.querySelector('[data-role="aiinput"]'); if (inq) inq.focus(); } return; }
     if (act === "quick") { if (!aiGate()) return; return aiAsk(currentQ(), quickText(parseInt(el.getAttribute("data-q"), 10))); }
     if (act === "ai-gen") { if (!aiGate()) return; aiGenerate(currentQ()); return; }
