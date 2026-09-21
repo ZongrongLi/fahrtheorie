@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v83**.
+Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v84**.
 
 ## Where things live
 
@@ -320,6 +320,16 @@ so I never saw a single page; Chrome suspends background tabs, so reading an exi
 `/account_details`, `/settings/account/bank_accounts`) bounce to `/dashboard`. Blind to the visuals, I
 burned a lot of turns guessing selectors and then drew the wrong PayPal conclusion from the API.
 **For any heavy React admin, ask for a screenshot first.**
+
+## v84: English-first entry pages, zero CJK in the static shell
+
+Follow-up to v83: the runtime already defaulted to English, but the static HTML shell still
+painted Chinese on first load (hardcoded fallbacks, title, description, html lang zh-CN). All
+data-i18n fallbacks in index.html are now the English pack strings, pulled mechanically from
+i18n.js (17 swaps, zero hand-typed copy), plus title, description, html lang and the two rail
+counters. privacy.html and terms.html got English title, description and lang (body copy stays
+Chinese pending legal review). Verified: live homepage serves zero CJK characters. Commit 4fe5d86.
+Backend 151/151; front end startup 36 + legal 18 + ai-lang 6 + progress 11, all green.
 
 ## v83: English by default, price back to EUR 5.00
 
