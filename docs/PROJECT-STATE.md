@@ -338,7 +338,10 @@ wrong "next update 2027" claim - the authority revises every 1 April and 1 Octob
 note now says exactly that with 2025-04-01 still current. Edit safety: all three data files
 round-tripped byte-identical through parse/serialize before filtering, so the rewrite removed
 nothing else. Front end startup 36 + legal 18 + ai-lang 6 + progress 11, all green. Backend
-untouched (still 151/151 from v84).
+untouched (still 151/151 from v84). Live verified 2026-09-21: `build v85` served, rail reads
+`Class B 1262 - all 2407`, live `questions.js` parses to 2407 with zero of the 6 retired ids,
+live `videos.js` has zero references to them. (Pages deployment `6565781748` took a few minutes;
+`main` already had the content while the CDN still served v84 - normal queue, not a stuck build.)
 
 ## v84: English-first entry pages, zero CJK in the static shell
 
