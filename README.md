@@ -2,7 +2,7 @@
 
 德国驾照理论考试刷题应用：分类刷题、错题本、笔记、AI 讲解、图片题与视频题，
 **10 种界面语言**（下拉框切换，含阿拉伯语 RTL）+ 题目中/英/德显示切换，**AI 讲解语言跟随题目语言**。
-学习进度存浏览器本地；账号、AI 额度、支付走 Cloudflare Worker 后端。线上：https://fahrtheorie.homes（当前 build v86）。
+学习进度存浏览器本地；账号、AI 额度、支付走 Cloudflare Worker 后端。线上：https://fahrtheorie.homes（当前 build v87）。
 
 - 题库：官方目录（2025-04-01 版，2026 年 9 月仍为最新），默认只显示 **B 照 1262 题**，可切换「全部车型 2407 题」
 - 单页应用，**无构建步骤**；前端纯静态（GitHub Pages），账号/AI/支付由 Cloudflare Worker + KV 提供（见 `../../dtt-backend/`）；学习进度仍只存用户浏览器

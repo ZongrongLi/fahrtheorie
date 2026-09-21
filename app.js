@@ -70,7 +70,7 @@
   });
   window.__explLang = prefs.explLang;
   window.__explManual = false;   // per-question/settings override of the explanation language (session only)
-  var session = null, aiPanelOpen = {}, aiHist = {}, lastHash = "#/home";
+  var session = null, aiPanelOpen = {}, aiHist = {}, lastHash = "#/home", pendingGoogleCredential = "";
   function navFromHash(h) {
     var v = String(h || "").replace(/^#\/?/, "").split(/[/?]/)[0];
     if (v === "cat") return "categories";
@@ -1336,7 +1336,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v86 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v87 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1401,6 +1401,9 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
         if (!j || typeof j.left !== "number") return;
+        var nextUser = String(j.user || prefs.user || "");
+        var userChanged = nextUser && nextUser !== prefs.user;
+        if (userChanged) prefs.user = nextUser;
         prefs.serverLeft = j.left;
         /* 付款状态以服务器为准，两个方向都要同步。之前只往 true 翻、从不翻回 false，
            所以后台把账号重置成未购之后，浏览器会永远显示已解锁。请求失败走 catch，
@@ -1408,6 +1411,7 @@
         if ("unlimited" in j) prefs.unlimited = j.unlimited === true;
         savePrefs();
         if (session) rerenderQuiz();
+        if (userChanged) renderTopbar();
       })
       .catch(function () {});
   }
@@ -1425,8 +1429,9 @@
     return true;
   }
   function finishLogin(name, j) {
-    if (!prefs.uid) prefs.uid = "u" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-    prefs.user = name;
+    if (j && j.uid) prefs.uid = j.uid;
+    else if (!prefs.uid) prefs.uid = "u" + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    prefs.user = String((j && j.user) || name || "");
     if (j) { prefs.token = j.token || ""; prefs.serverLeft = (typeof j.left === "number") ? j.left : 10; applyServerAI(); }
     else if (typeof prefs.freeLeft !== "number") prefs.freeLeft = 10;
     savePrefs(); syncUser(); closeModal(); applyTheme(); renderTopbar();
@@ -1442,7 +1447,7 @@
     if (apiRoot()) {
       return fetch(apiRoot() + "/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name }) })
         .then(function (r) { return r.json(); })
-        .then(function (j) { if (!j || j.error) { toast(String((j && j.error) || t("auth.failLogin"))); return false; } return finishLogin(j.user || name, j); })
+        .then(function (j) { if (!j || j.error) { toast(authApiError(j, "auth.failLogin")); return false; } return finishLogin(j.user || name, j); })
         .catch(function () { toast(t("err.backendLocal")); return finishLogin(name, null); });
     }
     return finishLogin(name, null);
@@ -1451,27 +1456,34 @@
   function showLogin() { showAuth("login"); }
   function showAuth(mode) {
     closeModal();
-    var reg = mode === "register", server = !!apiRoot();
+    var reg = mode === "register", googleName = mode === "google-username", server = !!apiRoot();
     var m = document.createElement("div");
     m.className = "modal-mask"; m.setAttribute("data-act", "close-modal");
-    m.innerHTML = '<div class="modal"><h3>' + esc(reg ? t("auth.registerTitle") : t("auth.loginTitle")) + '</h3>' +
-      '<p class="muted">' + esc(server ? (reg ? t("auth.registerText") : t("auth.loginText")) : t("auth.localNote")) + '</p>' +
+    m.innerHTML = '<div class="modal"><h3>' + esc(googleName ? t("auth.googleUsernameTitle") : (reg ? t("auth.registerTitle") : t("auth.loginTitle"))) + '</h3>' +
+      '<p class="muted">' + esc(googleName ? t("auth.googleUsernameText") : (server ? (reg ? t("auth.registerText") : t("auth.loginText")) : t("auth.localNote"))) + '</p>' +
       (server
-        ? '<input class="lic-input" data-role="a-email" type="email" placeholder="' + esc(t("auth.email")) + '" style="width:100%;box-sizing:border-box;margin-bottom:8px" autocomplete="email">' +
-          '<input class="lic-input" data-role="a-pass" type="password" placeholder="' + esc(t("auth.pass")) + '" style="width:100%;box-sizing:border-box" autocomplete="' + (reg ? "new-password" : "current-password") + '">'
+        ? (googleName
+          ? '<input class="lic-input" data-role="a-username" placeholder="' + esc(t("auth.username")) + '" style="width:100%;box-sizing:border-box" autocomplete="username">'
+          : (reg
+            ? '<input class="lic-input" data-role="a-username" placeholder="' + esc(t("auth.username")) + '" style="width:100%;box-sizing:border-box;margin-bottom:8px" autocomplete="username">' +
+              '<input class="lic-input" data-role="a-email" type="email" placeholder="' + esc(t("auth.email")) + '" style="width:100%;box-sizing:border-box;margin-bottom:8px" autocomplete="email">' +
+              '<input class="lic-input" data-role="a-pass" type="password" placeholder="' + esc(t("auth.pass")) + '" style="width:100%;box-sizing:border-box" autocomplete="new-password">'
+            : '<input class="lic-input" data-role="a-login" placeholder="' + esc(t("auth.loginField")) + '" style="width:100%;box-sizing:border-box;margin-bottom:8px" autocomplete="username">' +
+              '<input class="lic-input" data-role="a-pass" type="password" placeholder="' + esc(t("auth.pass")) + '" style="width:100%;box-sizing:border-box" autocomplete="current-password">'))
         : '<input class="lic-input" data-role="a-name" placeholder="' + esc(t("login.field")) + '" style="width:100%;box-sizing:border-box" autocomplete="username" value="' + esc(prefs.user || "") + '">') +
+      (server ? '<p class="fineprint" style="margin-top:8px">' + esc(t("auth.usernameNote")) + '</p>' : '') +
       '<div class="q-actions center" style="margin-top:14px">' +
-        '<button class="btn primary small" data-act="' + (reg ? "do-register" : "do-login") + '">' + esc(reg ? t("auth.registerBtn") : t("auth.loginBtn")) + '</button>' +
+        '<button class="btn primary small" data-act="' + (googleName ? "google-username" : (reg ? "do-register" : "do-login")) + '">' + esc(googleName ? t("auth.googleConfirm") : (reg ? t("auth.registerBtn") : t("auth.loginBtn"))) + '</button>' +
         '<button class="btn ghost small" data-act="close-modal">' + esc(t("login.skip")) + '</button>' +
       '</div>' +
-      (server ? '<p class="fineprint"><button class="pill" data-act="auth-switch" data-val="' + (reg ? "login" : "register") + '">' + esc(reg ? t("auth.haveAccount") : t("auth.noAccount")) + '</button></p>' : '') +
-      (server && prefs.googleClientId ? '<div class="gsi-wrap" data-role="gsi" style="margin-top:12px"></div>' : '') +
-      (server && !prefs.googleClientId ? '<p class="fineprint" style="margin-top:10px">' + esc(t("auth.googleNeedId")) + '</p>' : '') +
+      (server && !googleName ? '<p class="fineprint"><button class="pill" data-act="auth-switch" data-val="' + (reg ? "login" : "register") + '">' + esc(reg ? t("auth.haveAccount") : t("auth.noAccount")) + '</button></p>' : '') +
+      (server && !googleName && prefs.googleClientId ? '<div class="gsi-wrap" data-role="gsi" style="margin-top:12px"></div>' : '') +
+      (server && !googleName && !prefs.googleClientId ? '<p class="fineprint" style="margin-top:10px">' + esc(t("auth.googleNeedId")) + '</p>' : '') +
       '<p class="fineprint">' + esc(t("ai.freeAllNote")) + '</p>' +
       '<p class="fineprint">' + esc(t("login.note")) + '</p>' +
     '</div>';
     document.body.appendChild(m);
-    if (server && prefs.googleClientId) mountGoogleAuth();
+    if (server && !googleName && prefs.googleClientId) mountGoogleAuth();
   }
   function mountGoogleAuth() {
     var cid = prefs.googleClientId, box = document.querySelector('[data-role="gsi"]');
@@ -1482,8 +1494,13 @@
           client_id: cid,
           callback: function (resp) {
             if (!resp || !resp.credential) return;
-            authPost("/api/google", { credential: resp.credential })
-              .then(function (j) { if (!j || j.error) toast(String((j && j.error) || t("auth.googleFail"))); else finishLogin(j.user, j); })
+            pendingGoogleCredential = resp.credential;
+            authPost("/api/google", { credential: pendingGoogleCredential })
+              .then(function (j) {
+                if (j && j.error === "username_required") { showAuth("google-username"); return; }
+                if (!j || j.error) toast(authApiError(j, "auth.googleFail"));
+                else finishLogin(j.user, j);
+              })
               .catch(function () { toast(t("err.backend")); });
           }
         });
@@ -1501,6 +1518,16 @@
   function authPost(path, payload) {
     return fetch(apiRoot() + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       .then(function (r) { return r.json(); });
+  }
+  function authApiError(j, fallback) {
+    var code = String((j && j.error) || "");
+    if (code === "invalid_username" || code === "username_required") return t("auth.badUsername");
+    if (code === "username_taken") return t("auth.taken");
+    if (code === "email_taken") return t("auth.emailTaken");
+    if (code === "invalid_email") return t("auth.invalidEmail");
+    if (code === "short_password") return t("auth.shortPassword");
+    if (code === "bad_login") return t("auth.badLogin");
+    return code || t(fallback);
   }
   function unlockKeyFrom(role) { var el = document.querySelector('[data-role="' + role + '"]'); return el ? String(el.value || "").trim() : ""; }
   var AUTH_B = "Bea" + "rer ";
@@ -1847,20 +1874,30 @@
     if (act === "login-open") { showAuth("login"); return; }
     if (act === "register-open") { showAuth("register"); return; }
     if (act === "auth-switch") { showAuth(el.getAttribute("data-val")); return; }
+    if (act === "google-username") {
+      var gu_ = authVal("a-username");
+      if (!/^[a-zA-Z0-9_]{3,24}$/.test(gu_)) { toast(t("auth.badUsername")); return; }
+      if (!pendingGoogleCredential) { showAuth("login"); return; }
+      authPost("/api/google", { credential: pendingGoogleCredential, username: gu_ })
+        .then(function (j) { if (!j || j.error) toast(authApiError(j, "auth.googleFail")); else { pendingGoogleCredential = ""; finishLogin(j.user, j); } })
+        .catch(function () { toast(t("err.backend")); });
+      return;
+    }
     if (act === "do-register") {
-      var re_ = authVal("a-email"), rp_ = authVal("a-pass");
-      if (!re_ || !rp_) { toast(t("auth.needBoth")); return; }
-      authPost("/api/register", { email: re_, password: rp_ })
-        .then(function (j) { if (!j || j.error) toast(String((j && j.error) || t("auth.failRegister"))); else finishLogin(j.user, j); })
+      var ru_ = authVal("a-username"), re_ = authVal("a-email"), rp_ = authVal("a-pass");
+      if (!/^[a-zA-Z0-9_]{3,24}$/.test(ru_)) { toast(t("auth.badUsername")); return; }
+      if (!re_ || !rp_) { toast(t("auth.needAll")); return; }
+      authPost("/api/register", { username: ru_, email: re_, password: rp_ })
+        .then(function (j) { if (!j || j.error) toast(authApiError(j, "auth.failRegister")); else finishLogin(j.user, j); })
         .catch(function () { toast(t("err.backend")); });
       return;
     }
     if (act === "do-login") {
       if (apiRoot()) {
-        var le_ = authVal("a-email"), lp_ = authVal("a-pass");
+        var le_ = authVal("a-login"), lp_ = authVal("a-pass");
         if (!le_ || !lp_) { toast(t("auth.needBoth")); return; }
-        authPost("/api/login", { email: le_, password: lp_ })
-          .then(function (j) { if (!j || j.error) toast(String((j && j.error) || t("auth.failLogin"))); else finishLogin(j.user, j); })
+        authPost("/api/login", { name: le_, password: lp_ })
+        .then(function (j) { if (!j || j.error) toast(authApiError(j, "auth.failLogin")); else finishLogin(j.user, j); })
           .catch(function () { toast(t("err.backend")); });
         return;
       }

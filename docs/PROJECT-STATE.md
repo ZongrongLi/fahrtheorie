@@ -321,6 +321,35 @@ so I never saw a single page; Chrome suspends background tabs, so reading an exi
 burned a lot of turns guessing selectors and then drew the wrong PayPal conclusion from the API.
 **For any heavy React admin, ask for a screenshot first.**
 
+## v87: public usernames, email privacy, stable Google identity
+
+The v86 identity model used the email as both login key and public discussion name. Besides exposing
+addresses, Google sign-in recreated an account when its internal Google key was absent, even if the
+same verified email already existed; the owner ended up with several historical uids and a mention that
+was delivered to an old uid. v87 separates identity concerns:
+
+- Accounts now have a required, normalized, globally unique public username (`3-24` ASCII
+  letters/digits/underscore). Registration asks for username + email + password; login accepts
+  username or email plus password.
+- The canonical KV record is `user:<uid>`. Private aliases (`alias:user:<username>`,
+  `alias:email:<email>`, `alias:google:g:<sub>`) point to the uid. Legacy `user:<email>` records are
+  migrated on first read, preserving uid/payment/progress and deriving a username from the email local
+  part. Username conflicts get a numeric suffix during migration; new registrations return conflicts.
+- Google sign-in first resolves its Google key, then the verified email. An existing email account is
+  linked in place - no uid fork. A genuinely new Google account is asked for a public username before
+  creation.
+- Discussion APIs expose only usernames. Existing comments/notifications containing email names are
+  mapped to usernames on read; unresolved old names become `member`. Mentions now parse `@username`,
+  not `@email`.
+- Guests remain local-first: progress/notes/wrong answers stay in browser storage until they register
+  or sign in. Local-only/offline mode remains nickname-based because there is no server account.
+
+Backend tests grew from 165 to **177/177**, including a signed mocked Google JWT proving same-email
+merge keeps `uSAME`, second sign-in uses the stable index, a new Google user without a username gets
+`username_required`, and choosing one creates a unique account. Frontend adds `tests/identity.test.cjs`
+(3 tests); full suite is startup 36 + legal 18 + AI-language 6 + progress 11 + notification 5 +
+identity 3. New auth copy and localized API error codes are present in all 10 language packs.
+
 ## v86: notification bell (@mentions + welcome), 5s comment window, AI daily cap
 
 Three asks from the owner in one release. (1) The 20s comment throttle kept biting normal
