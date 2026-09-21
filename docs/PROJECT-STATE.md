@@ -363,6 +363,10 @@ so marking someone else's id marks nothing). Front end: bell in the topbar (logg
 unread badge, dropdown panel, click jumps to `#/practice?ids=<qid>` and opens the discussion,
 60s poll plus a pull after every post. Eight new i18n keys x 10 packs, parity test green.
 Normal traffic is tens of KV reads/writes a day - noise against the free quota.
+
+> Corrected in v88: "noise against the free quota" held for reads and storage, but not for
+> writes/deletes/lists, which are capped at 1,000/day each. See the v88/v89 section above.
+
 (3) AI cost guardrails, no anti-sybil (owner: let them farm, copying to free sites is easier
 anyway): the proxy no longer lets the client pick the model (always `UPSTREAM_MODEL`),
 `max_tokens` is clamped to 1500, and a per-user daily counter `ai:<uid>:<date>` caps everyone -
@@ -546,3 +550,46 @@ npx wrangler kv key list --binding DTT --remote
 ```
 
 Backend deploy and secrets: see `../dtt-backend/README.md` and `../dtt-backend/PADDLE-ONBOARDING.md`.
+
+## v88/v89: KV free-tier budget (the v87 regression)
+
+Cloudflare raised a KV usage alert the evening v87 shipped. Storage was never the problem: the whole
+namespace was **42 keys / 9.5 KB** against a 1 GB free allowance. The free tier that actually bites is
+**1,000 writes, 1,000 deletes and 1,000 list operations per day**.
+
+GraphQL analytics (`kvOperationsAdaptiveGroups`, hourly) showed writes jumping from a 19-90/day
+baseline on 09-18..09-20 to **981/day (98% of the cap)** on 09-21, with deletes at 387 and lists at 481.
+
+Two regressions, both introduced by the v87 identity work:
+
+1. `getUser()` called `migrateUser()` unconditionally, and `migrateUser()` called `saveShapedUser()`
+   unconditionally. Every *read* of a user therefore cost **6 puts + 3 deletes**, forever, even for
+   records migrated long ago. Measured: `GET /api/me` = 5 gets / 6 puts / 3 deletes. A single open tab
+   polling `/api/me` + `/api/notifications` every 60s burned ~720 writes/hour, i.e. the entire
+   site-wide daily allowance in under two hours.
+2. Notifications used one key per notification (`n:<uid>:<nid>`), so listing them cost a `list`
+   operation - and it listed even when the user had zero notifications. A tab open for 24h = 1,440
+   lists, over the 1,000/day cap on its own.
+
+Fixes: `migrateUser(env, u, force)` writes only when a record genuinely needs migration or repair
+(forced only when the hit came from a legacy `user:<email>` / `user:g:<sub>` key); `saveShapedUser()`
+stopped deleting `user:<name>` (which equals the username, so it was a guaranteed wasted delete);
+notifications became a **single key** `n:<uid>` holding an array (max 50, newest first) with a one-shot
+lazy migration off the old per-notification keys and an empty-array write so a zero-notification user
+never lists twice; uid-shaped lookups try the canonical key first. Frontend: notification poll 60s ->
+120s and skipped while the tab is hidden (plus an immediate pull on becoming visible); progress push
+debounce 8s -> 20s (pagehide/visibilitychange still flush immediately).
+
+Result: `GET /api/me` is now 2 gets / 0 puts / 0 deletes, `GET /api/notifications` is 3 gets / 0 puts /
+0 deletes / 0 lists, and the first full hour after deploy recorded **0 writes, 0 deletes, 0 lists**.
+Backend tests grew to **183/183**, including a regression guard asserting zero writes/deletes/lists over
+five steady-state poll cycles and a test that legacy per-notification keys collapse into the single key.
+
+Remaining ceiling, stated honestly: after the fix the only meaningful writes are progress saves, capped
+at ~180/hour by the 20s debounce, so the free tier is roughly **5.5 study-hours per day across all
+users**. That is fine for the owner plus a handful of friends, and it will not survive a dozen active
+users. When that happens the options are Workers Paid ($5/mo, 1M writes/month) or moving progress to D1
+(100k writes/day free). Worth acting on before it breaks, because exceeding the cap fails **silently**:
+progress simply stops persisting and the UI shows nothing.
+
+## v86: notification bell (@mentions + welcome), 5s comment window, AI daily cap
