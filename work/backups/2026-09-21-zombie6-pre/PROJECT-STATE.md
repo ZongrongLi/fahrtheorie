@@ -321,25 +321,6 @@ so I never saw a single page; Chrome suspends background tabs, so reading an exi
 burned a lot of turns guessing selectors and then drew the wrong PayPal conclusion from the API.
 **For any heavy React admin, ask for a screenshot first.**
 
-## v85: six retired questions removed, catalog now 2407 (B 1262)
-
-The 2025-04-01 official revision deleted 6 questions
-(`1.1.05-103`, `2.1.03-030`, `2.1.07-018`, `2.1.07-021-M`, `2.1.07-120-M`, `2.1.08-020`)
-and added 12 - the 12 were already in the bank, the 6 were still served, so this release
-removes exactly those 6. Deleted from `data/questions.js`, `data/zh.js` (six `__ZH` entries
-plus one `__ZHSTEM` stem for `2.1.07-120-M` - an earlier handover note claimed `zh.js` had no
-traces, which was wrong; exact-match grep found 7 hits), `data/videos.js`, and `assets/img`
-(six orphaned webp files). The six orphaned mp4s went out of `fahrtheorie-media` as well
-(commit `dbc36f1`, served via jsDelivr). Counts recomputed mechanically with the `isClassB`
-rule, not inferred: 2413 -> 2407 total, 1264 -> 1262 class B (only `1.1.05-103` and
-`2.1.07-120-M` were class B). The rail counters render dynamically; only the static fallback
-in `index.html` needed the new numbers. `home.dataNote` in all 10 i18n packs also dropped the
-wrong "next update 2027" claim - the authority revises every 1 April and 1 October, and the
-note now says exactly that with 2025-04-01 still current. Edit safety: all three data files
-round-tripped byte-identical through parse/serialize before filtering, so the rewrite removed
-nothing else. Front end startup 36 + legal 18 + ai-lang 6 + progress 11, all green. Backend
-untouched (still 151/151 from v84).
-
 ## v84: English-first entry pages, zero CJK in the static shell
 
 Follow-up to v83: the runtime already defaulted to English, but the static HTML shell still

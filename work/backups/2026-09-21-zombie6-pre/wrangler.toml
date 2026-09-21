@@ -1,0 +1,54 @@
+name = "dtt-backend"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# 1) 建 KV：wrangler kv namespace create DTT
+#    把返回的 id 填到下面
+[[kv_namespaces]]
+binding = "DTT"
+id = "f69474f8a7a84213b2943a090fb53e59"
+
+[vars]
+UPSTREAM_URL = "https://api.deepseek.com/v1"
+UPSTREAM_MODEL = "deepseek-chat"
+FREE_TRIES = "10"
+UNLOCK_CODES = "FRIEND-0001,LAUNCH-0002"
+# 收款（Stripe）：付费后自动解锁
+SITE_URL = "https://fahrtheorie.homes"
+# ⚠️ 测试价（2026-09-20 起，随时改回去）：Stripe 的 EUR 下限是 0.50，写 10(=0.1€) 会被
+# API 直接拒："The Checkout Session's total amount due must add up to at least €0.50 EUR"。
+# 已跑通，2026-09-21 恢复正式价 €5.00。
+PRICE_CENTS = "500"
+PRICE_CURRENCY = "eur"
+PRICE_NAME = "Unlimited AI (one-off)"
+# 密钥用命令设置： wrangler secret put STRIPE_SECRET_KEY
+
+# Paddle（Merchant of Record，可选第二条收款通道）
+# PADDLE_ENV = "live" → api.paddle.com；"sandbox" → sandbox-api.paddle.com
+# sandbox 账号在 sandbox-vendors.paddle.com 自助开通，不需要人工审核，key 里带 _sdbx、token 前缀 test_
+# 联调完把 PADDLE_ENV 改回 live 再部署（改完要 wrangler deploy 才生效）
+PADDLE_ENV = "sandbox"
+PADDLE_PRICE_ID = "pri_01m2v3q1xefsvfwxffb47mwxz4"
+# 访客国家 → 交易币种。Paddle 的微信只在 CN + CNY/USD 出现，沿用 EUR 就永远不显示。
+# 留空或不列的国家 = 不指定币种，沿用商品价格里的 EUR。
+PADDLE_LOCAL_CURRENCIES = "CN:CNY"
+# Stripe 的 PayPal 能力探测开关。留空=自动查 Stripe 账号能力（缓存 10 分钟）；
+# 万一 Stripe 改了能力字段名，可临时写 STRIPE_PAYPAL = "on" 或 "off" 强制。
+# 前端按钮文案与"第二个按钮是否显示"都由这个值决定，所以不要在没有 PayPal 时写 on。
+# STRIPE_PAYPAL = "auto"
+# 前端 Paddle.js 用的 client-side token（Paddle 官方：可安全暴露在前端，test_ 前缀=沙盒）
+PADDLE_CLIENT_TOKEN = "test_dce44cc3e17af0948ec7b2ab3fc"
+# 可选：webhook 时间戳容忍窗口（秒），默认 300。防重放，同时给 Paddle 的重试留余量
+# PADDLE_WEBHOOK_TOLERANCE = "300"
+# 只有 status ∈ completed / paid 的订单才解锁；billed 是「手动账单已开票待付款」，不解锁
+
+# Google 登录：OAuth Client ID（Web 应用）。留空则关闭 Google 登录。
+GOOGLE_CLIENT_ID = "29994549332-tbejncn8vrmvcs5jh51u7o845volaugv.apps.googleusercontent.com"
+
+# 2) 密钥不要写进文件，用命令设置：
+#    wrangler secret put UPSTREAM_KEY
+#    wrangler secret put STRIPE_SECRET_KEY        （可选）
+#    wrangler secret put STRIPE_WEBHOOK_SECRET    （可选，后台补刀）
+#    wrangler secret put STRIPE_WEBHOOK_SECRET_TEST（Stripe 测试密钥用的 webhook）
+#    wrangler secret put PADDLE_API_KEY           （可选）
+#    wrangler secret put PADDLE_WEBHOOK_SECRET    （可选；轮换期 Paddle 会下发多个 h1，任一匹配即通过）
