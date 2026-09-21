@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v81**.
+Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v82**.
 
 ## Where things live
 
@@ -321,6 +321,20 @@ so I never saw a single page; Chrome suspends background tabs, so reading an exi
 burned a lot of turns guessing selectors and then drew the wrong PayPal conclusion from the API.
 **For any heavy React admin, ask for a screenshot first.**
 
+## v82: discussion replies UI + per-user 1KB note budget
+
+The comment backend from v77 finally has a front end: every practice question card now renders a
+discussion panel (top-level posts plus one reply level, reply-to-reply flattened server-side, 20s
+rate limit, login required to post, hidden on exam pages). Thirteen new i18n keys x 10 packs, so the
+pack count is now 350 keys x 10, parity enforced by test.
+Notes got a per-user 1KB (UTF-8 bytes) budget on both sides: newest notes win, oldest drop first, a
+single oversized note is truncated instead of dropped, and the save handler tells the user when old
+notes were evicted. A fully-answered B catalog is about 68KB of progress; only note text could bloat,
+and it is now capped.
+Commit `f3ff79d`, Worker `4734116b`. Backend `node test.mjs` 151/151; front end startup 36 + legal 17 +
+ai-lang 6 + progress 11, all green. Live serves `build v82`; KV `DTT` holds 10 keys, zero `prog:` keys.
+`PRICE_CENTS` is still the `50` test price - restore `500` when testing ends.
+
 ## Current payment state
 
 | Provider | State |
@@ -367,6 +381,8 @@ that API expansion is not a reliable "no bank configured" signal.
 - Second real sandbox payment `txn_01m2v9tjseke6hm6f1ff9sbfdg` (EUR 5.00, `completed`,
   `custom_data.uid` = the payer's uid) unlocked **through the webhook alone** after the retry.
 - KV cleaned afterwards: the two throwaway accounts (6 keys) were deleted, back to the 8-key baseline.
+- v82 verified live: `build v82` served; backend `node test.mjs` 151/151, front end 36+17+6+11
+  all green; KV `--remote` lists 10 keys, zero `prog:` keys.
 - ⚠️ **2026-09-20 tooling trap, and it invalidates older "verified clean" claims**: `wrangler kv key list` /
   `get` / `delete` without **`--remote`** read the local `.wrangler/state` miniflare directory and return `[]`
   **without erroring** - so "I deleted it and checked with `key list`" can be a completely empty confirmation.
