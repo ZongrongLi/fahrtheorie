@@ -178,6 +178,25 @@ test('an already-logged-in boot pulls cloud progress without a fresh login', asy
   assert.equal(st.q['1.1.01-001'].a, 1, 'local entry survives the boot merge');
 });
 
+test('first login with an empty cloud pushes the local progress up', async () => {
+  const P = load({ prefs: signedIn, progress: null,
+    ls: { 'dtt.state.v1': JSON.stringify({ q: { '1.1.01-001': { a: 2, w: 1, r: 2, last: true, wrong: true, at: 7000 } },
+      notes: { '1.1.01-001': { text: '要让行', at: 7000 } }, tr: {}, ai: {}, days: {}, goal: 20 }) } });
+  await tick();
+  const posts = P.bodies.filter((b) => b && b.includes('1.1.01-001'));
+  assert.ok(posts.length >= 1, 'local progress must be pushed when the cloud is empty');
+  const up = JSON.parse(posts[0]);
+  assert.equal(up.q['1.1.01-001'].a, 2, 'answered count goes up');
+  assert.equal(up.q['1.1.01-001'].wrong, true, 'wrong flag goes up');
+  assert.equal(up.notes['1.1.01-001'].text, '要让行', 'note text goes up');
+});
+
+test('first login with nothing anywhere writes nothing', async () => {
+  const P = load({ prefs: signedIn, progress: null });
+  await tick();
+  assert.equal(P.bodies.filter((b) => b && b.includes('savedAt')).length, 0, 'no empty record for a fresh device');
+});
+
 test('login and progress hooks are wired in the app source', () => {
   assert.match(appSource, /progPull\(\);/, 'finishLogin must pull cloud progress');
   assert.match(appSource, /progPush\(\);/, 'saveState must schedule a push');

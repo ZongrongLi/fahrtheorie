@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v79**.
+Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v80**.
 
 ## Where things live
 
@@ -287,6 +287,7 @@ never a window where live payments could arrive with nothing to verify them:
    record is now ~127 KB). Backend tests 141 -> **145**, progress tests 5 -> **7** (full-catalog write +
    boot-pull pinned). Live verified: throwaway account wrote all 2413 entries in one call (200), then all 4
    of its KV keys were deleted (namespace back to 10 keys, no residue). Worker version `4e57836e`.
+12. **Push-on-empty-cloud (2026-09-21 morning, build v80).** Reviewing the v79 flow once more before going live caught a real hole: when the cloud record is `null`, `progPull()` returned early without pushing, so a browser holding the only copy (the owner's ~50 answered questions) would still never upload on boot. It now pushes local `q`/`notes` up when the cloud is empty, and writes nothing when both sides are empty (no junk records for fresh devices). Progress tests 7 -> **9**. With this, opening the homepage once in the already-logged-in browser is enough to sync.
    Storage estimate for the owner: ~4 KB for 50 answered questions; ~130 KB for a fully answered catalog;
    10k average users ~= tens of MB, a few percent of the free 1 GB KV quota - writes (debounced + 5 s
    throttle) are the only number to watch if traffic grows.

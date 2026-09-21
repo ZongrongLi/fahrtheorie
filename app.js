@@ -131,7 +131,11 @@
     fetch(apiRoot() + "/api/progress", { headers: { Authorization: AUTH_B + prefs.token } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (j) {
-        if (!j || !j.progress) return;
+        if (!j || !j.progress) {   // 云端是空的：本机有进度就推上去（首登即同步），本机也是空的就不写
+          var p0 = progSerialize();
+          if (Object.keys(p0.q).length || Object.keys(p0.notes).length) { progPushedSig = ""; progPush(true); }
+          return;
+        }
         progMerge(j.progress);
         try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e2) {}
         progPushedSig = ""; progPush(true);   // 本机旧进度（如未登录时刷的）也并上去
@@ -1122,7 +1126,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v79 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v80 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
