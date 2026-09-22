@@ -27,7 +27,7 @@ window.I18N = {
     "home.dueToday": "Today's goal",
     "home.categoriesTitle": "Browse by theme",
     "home.categoriesHint": "Every theme and chapter has its own mistake book.",
-    "home.dataNote": "Bank version: official catalogue of 2025-04-01 (still current; the authority revises it every 1 April and 1 October).",
+    "home.dataNote": "Question bank updated to the latest official catalogue (2026-04-01).",
     "cat.title": "Categories",
     "cat.sub": "Pick a theme or chapter to start practising.",
     "cat.questions": "questions",
@@ -230,7 +230,7 @@ window.I18N = {
     "settings.themeLight": "Light",
     "settings.themeDark": "Dark",
     "settings.data": "Question bank",
-    "settings.dataInfo": "{n} questions · {img} with figures · version 2025-04-01",
+    "settings.dataInfo": "{n} questions · {img} with figures · version 2026-04-01",
     "settings.progress": "Study data",
     "settings.reset": "Reset all progress",
     "settings.resetConfirm": "Clear all answers, the mistake book and every note? This cannot be undone.",
@@ -372,7 +372,7 @@ window.I18N = {
     "err.backendLocal": "Backend unreachable — local mode",
     "settings.langNote": "Interface language and quiz language are independent: the interface language sets buttons and labels, the quiz language sets the question text and answers.",
     "common.saved": "Saved",
-    "rail.bankVersion": "Catalogue {d}",
+    "rail.bankVersion": "Question bank · updated to {d} · latest",
     "rail.counts": "Class B {b} · all {a}"
   },
 };

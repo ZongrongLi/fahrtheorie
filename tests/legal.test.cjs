@@ -96,7 +96,7 @@ test('rail footer labels are localised and keep their placeholders', () => {
   assert.ok(index.includes('data-role="rail-counts"'), 'index.html needs the rail counts slot');
   const app = read('app.js');
   assert.ok(app.includes('function localizeRailFoot'), 'app.js must localise the rail footer');
-  assert.ok(/CATALOGUE_DATE = "2025-04-01"/.test(app), 'catalogue date constant must be kept');
+  assert.ok(/CATALOGUE_DATE = "2026-04-01"/.test(app), 'catalogue date constant must be kept');
 });
 
 test('the unlock dialog makes no refund promise', () => {

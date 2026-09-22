@@ -47,7 +47,7 @@
   };
 
   /* Official catalogue this build ships with — the rail footer label is localised from it. */
-  var CATALOGUE_DATE = "2025-04-01";
+  var CATALOGUE_DATE = "2026-04-01";
 
   /* ---------------- state ---------------- */
   var CAT = null, CAT_ALL = null, BY = {}, INDEX = null;
@@ -1421,7 +1421,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v91 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v92 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
