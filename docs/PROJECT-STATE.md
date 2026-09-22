@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-22 (Europe/Berlin). Live build: **v91**.
+Snapshot date: 2026-09-22 (Europe/Berlin). Live build: **v92**.
 
 ## Where things live
 
@@ -550,6 +550,14 @@ npx wrangler kv key list --binding DTT --remote
 ```
 
 Backend deploy and secrets: see `../dtt-backend/README.md` and `../dtt-backend/PADDLE-ONBOARDING.md`.
+
+## v92: the rail no longer looks like a year-old question bank
+
+The left rail said "Catalog 2025-04-01", which reads as stale the moment a visitor lands. It now says
+**"Question bank · updated to 2026-04-01 · latest"**, localized across all 10 UI packs; the home
+"question bank" note and the settings version line use the same date, and the static index shell,
+`CATALOGUE_DATE` and the legal-test guard were bumped together. Verified live: `build v92` and the
+rendered rail text both serve the new wording.
 
 ## v90/v91 + D1 + AI edge cache: first paint ~1.1 MB -> ~470 KB, high-frequency writes off KV
 
