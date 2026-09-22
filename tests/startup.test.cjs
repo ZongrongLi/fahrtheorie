@@ -581,7 +581,7 @@ test('a manual switch/settings override wins for the session', () => {
 test('switching quiz language drops the manual override', () => {
   assert.ok(appSource.includes('if (kind !== "ui") window.__explManual = false;'),
     'the language-dropdown handler must clear the manual explanation override');
-  assert.ok(appSource.includes('if (key === "contentLang") window.__explManual = false;'),
+  assert.ok(appSource.includes('if (key === "contentLang") { window.__explManual = false; needZh(); }'),
     'the seg handler must clear the manual explanation override on quiz-language switch');
   assert.ok(appSource.includes('window.__explManual = true; savePrefs(); aiHist = {}; refresh();'),
     'the per-question switch must mark a manual override');

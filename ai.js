@@ -213,6 +213,11 @@
   function chat(q, history, query, lang) {
     var c = cfg();
     if (!hasLLM()) return Promise.reject({ kind: "nokey" });
+    /* 中文题面翻译是懒加载的（data/zh.js，280KB）。要用中文提问就先等它到位，
+       否则 prompt 里的题目会退回英文，而模型被要求用中文回答，质量会掉。 */
+    if (lang === "zh" && window.__ensureZh) {
+      return window.__ensureZh().then(function () { return chat(q, history, query, lang); });
+    }
     var msgs = [{ role: "system", content: sysPrompt(q, lang) }];
     (history || []).slice(-8).forEach(function (m) {
       msgs.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.text });

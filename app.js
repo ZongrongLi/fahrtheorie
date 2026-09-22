@@ -276,6 +276,35 @@
     return l[0];
   }
   function zhWanted() { return contentLangs().indexOf("zh") >= 0; }
+  /* data/zh.js 是 280KB（gzip），而只有把「刷题语言」切到中文的人需要它。
+     以前它写在 index.html 里，所有人首屏都得下 —— 英文/德语用户白等 280KB。
+     现在按需注入：需要中文题面时才拉，拉完重渲染一次。拉之前 zhOf() 返回 null，
+     界面自动回落英文题面 + 「暂无中文」提示（这条路径本来就存在）。 */
+  var zhLoad = null;
+  /* 版本号从 app.js 自己的 <script src="app.js?v=NN"> 里读，避免和 index.html 脱节 */
+  var BUILD_V = (function () {
+    try {
+      var cs = document.currentScript;
+      if (cs && cs.src) { var m = /[?&]v=([^&]+)/.exec(cs.src); if (m) return m[1]; }
+    } catch (e) {}
+    return "";
+  })();
+  function ensureZh() {
+    if (window.__ZH) return Promise.resolve(true);
+    if (zhLoad) return zhLoad;
+    zhLoad = new Promise(function (res) {
+      if (typeof document === "undefined") return res(false);
+      var s = document.createElement("script");
+      s.src = "data/zh.js" + (BUILD_V ? "?v=" + BUILD_V : "");
+      s.async = true;
+      s.onload = function () { res(!!window.__ZH); };
+      s.onerror = function () { res(false); };
+      document.head.appendChild(s);
+    });
+    return zhLoad;
+  }
+  window.__ensureZh = ensureZh;
+  function needZh() { if (zhWanted()) ensureZh().then(function (ok) { if (ok) refresh(); }); }
   function zhOf(q) { return (window.__ZH && window.__ZH[q.id]) || null; }
   function zhTheme(th) { return (window.__ZH_THEME && window.__ZH_THEME[th]) || ""; }
   function zhChap(ch) { return (window.__ZH_CHAP && window.__ZH_CHAP[ch]) || ""; }
@@ -1339,7 +1368,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v89 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v90 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1818,13 +1847,13 @@
   /* ---------------- events ---------------- */
   document.addEventListener("click", function (e) {
     var segBtn = e.target.closest("[data-seg] .seg-btn");
-    if (segBtn) { var name = segBtn.closest("[data-seg]").getAttribute("data-seg"); var key = name === "uilang" ? "uiLang" : name === "contentlang" ? "contentLang" : name === "expllang" ? "explLang" : name === "scope" ? "scope" : "theme"; prefs[key] = segBtn.getAttribute("data-val"); if (key === "explLang") { window.__explLang = prefs.explLang; window.__explManual = true; } if (key === "contentLang") window.__explManual = false; savePrefs(); applyTheme(); buildIndex(); if (key === "scope") { applyScope(); route(); } else { document.getElementById("view").innerHTML = vSettings(); } return; }
+    if (segBtn) { var name = segBtn.closest("[data-seg]").getAttribute("data-seg"); var key = name === "uilang" ? "uiLang" : name === "contentlang" ? "contentLang" : name === "expllang" ? "explLang" : name === "scope" ? "scope" : "theme"; prefs[key] = segBtn.getAttribute("data-val"); if (key === "explLang") { window.__explLang = prefs.explLang; window.__explManual = true; } if (key === "contentLang") { window.__explManual = false; needZh(); } savePrefs(); applyTheme(); buildIndex(); if (key === "scope") { applyScope(); route(); } else { document.getElementById("view").innerHTML = vSettings(); } return; }
 
     var el = e.target.closest("[data-act]:not(select)");
     if (!el) { if (notifCache.open && !e.target.closest('[data-role="notifpanel"]')) { notifCache.open = false; notifPaint(); } return; }
     var act = el.getAttribute("data-act");
     if (act === "ui-lang") { prefs.uiLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; refresh(); return; }
-    if (act === "content-lang") { prefs.contentLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; refresh(); return; }
+    if (act === "content-lang") { prefs.contentLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; needZh(); refresh(); return; }
     if (act === "expl-lang") { prefs.explLang = el.getAttribute("data-val"); window.__explLang = prefs.explLang; window.__explManual = true; savePrefs(); aiHist = {}; refresh(); return; }
     if (act === "notif-toggle") { notifToggle(); return; }
     if (act === "notif-read-all") { notifReadAll(); return; }
@@ -1942,6 +1971,7 @@
       if (kind !== "ui") window.__explManual = false;
       savePrefs(); aiHist = {}; applyTheme(); buildIndex();
       toast(kind === "ui" ? langPickerName(prefs.uiLang) : t("lang." + prefs.contentLang));
+      needZh();   // 切到中文刷题语言时把题面翻译拉进来，拉完自己重渲染
       refresh();
       return;
     }
@@ -2068,6 +2098,7 @@
     syncUser();
     handlePaidReturn();
     window.__dttAfterAI = refreshQuota;
+    needZh();   // 刷题语言含中文才真正去拉 data/zh.js
     if (apiRoot() && prefs.token) { applyServerAI(); refreshQuota(); progPull(); }  // 已登录直接同步：光刷新不重登也要拉云端（v79 补）
     notifFetch(true);
     /* 通知轮询：免费 KV 额度是每天 10 万读，挂机轮询是最容易烧掉它的地方。
