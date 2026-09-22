@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v84**.
+Snapshot date: 2026-09-22 (Europe/Berlin). Live build: **v91**.
 
 ## Where things live
 
@@ -9,7 +9,7 @@ Snapshot date: 2026-09-21 (Europe/Berlin). Live build: **v84**.
 | Live site | https://fahrtheorie.homes (GitHub Pages) |
 | Source repo | https://github.com/ZongrongLi/fahrtheorie (branch `main`) |
 | Video assets | https://github.com/Zongrongli/fahrtheorie-media (branch `master`, 251 mp4, served via jsDelivr) |
-| Backend | https://dtt-backend.tiancai110a.workers.dev (Cloudflare Worker + KV) |
+| Backend | https://dtt-backend.tiancai110a.workers.dev (Cloudflare Worker + KV + D1) |
 | Backend source | sibling folder `dtt-backend/` in the AutoClaw workspace (**not** a git repo; snapshots only) |
 
 ## v59 - v63: making the Paddle channel actually work
@@ -550,6 +550,75 @@ npx wrangler kv key list --binding DTT --remote
 ```
 
 Backend deploy and secrets: see `../dtt-backend/README.md` and `../dtt-backend/PADDLE-ONBOARDING.md`.
+
+## v90/v91 + D1 + AI edge cache: first paint ~1.1 MB -> ~470 KB, high-frequency writes off KV
+
+### v90: the Chinese question pack is lazy-loaded
+
+`data/zh.js` (280 KB gzip) was a static `<script>` in `index.html`, so every visitor paid for it even
+though only learners whose quiz language includes Chinese need it. `app.js` now injects it on demand
+(`ensureZh()` / `needZh()`), re-renders when it lands, and `ai.js` awaits it before building a Chinese
+prompt so the prompt cannot silently fall back to English question text. The asset version is read
+from `app.js`'s own `?v=` so it cannot drift from `index.html`. Front-end tests 79 -> **83** (4 new).
+
+### v91: the all-classes catalog and the non-English UI packs are lazy-loaded
+
+`data/questions.js` was 720 KB gzip carrying all 2,407 questions. A Klasse B learner only needs 1,262
+of them, so `data/questions.js` now ships that subset (409 KB gzip) and the other 1,145 questions
+(trucks, buses, ...) moved to `data/questions-more.js`. `app.js ensureAllQ()` fetches and merges them
+only when the scope switch is set to "all"; `window.__CATALOG_ALL_COUNT` keeps the rail and the scope
+labels honest before that fetch. `work/split-catalog.mjs` regenerates the split after a catalog update.
+
+`i18n.js` carried all 10 UI packs at 68 KB gzip. English is both the default and the fallback every
+other pack resolves against, so `i18n.js` now carries only English (7 KB gzip) and the other nine
+packs moved to `i18n-more.js` (62 KB gzip, lazy). `ensureI18n()` merges them; boot waits for the pack
+when the site language is not English, so a German/Chinese visitor never gets a half-translated first
+paint. `work/split-i18n.mjs` regenerates the split, and a test asserts every pack still has the exact
+same key set as English (the first browser run caught a `window.I18N_MORE` vs `window.__I18N_MORE`
+naming mismatch that the unit test had papered over with a hand-written stub).
+
+`ai.js sysPrompt()` was also put on a token diet: a German reader no longer receives English
+translations of German source text, and a Chinese reader gets the Chinese translation instead of the
+English one, while the German original is always kept (it is the authoritative source).
+
+Front-end tests 83 -> **96** (5 for the catalog loader, 6 for the language-pack loader and 2 for the
+prompt diet).
+
+First-paint payload (gzip): index 1.7 KB + styles 7 KB + i18n 7 KB + ai 8 KB + app 37 KB +
+questions 409 KB + videos 1.8 KB = **~470 KB**, down from ~1.1 MB (v89).
+
+### D1: progress and the AI daily counter moved off KV
+
+KV Free gives only 1,000 writes / deletes / lists per day (see the v88/v89 incident). D1 Free gives
+**500,000 row reads + 100,000 row writes per day** and 5 GB of storage, in the same Cloudflare account
+and the same Worker at zero extra hosting cost. Moving to an outside provider (Hetzner VPS, Turso,
+Supabase, Neon) would only turn EUR 0 into a monthly bill plus a second thing to operate, so it was
+not done.
+
+- `wrangler d1 create dtt` -> `database_id 94e6a5eb-9960-4721-815c-fa8f1816825f`, region WEUR.
+- `dtt-backend/schema.sql` creates `prog(uid, data, written_at)` and `ai_day(uid, day, n)`.
+- `getProg()` reads D1 first, falls back to KV on a D1 error, and lazily migrates a KV hit into D1
+  without deleting the old KV key (saving the 1,000/day delete allowance).
+- `putProg()` / `aiUsed()` / `aiSetUsed()` use D1 upserts; new progress writes no longer touch KV.
+- Backend tests 183 -> **199/199** (a D1 test double that executes the SQL semantics, plus migration
+  and fallback cases).
+
+Live check with a throwaway account: after writing progress, the row appeared in D1 and **no new
+`prog:` key appeared in KV**. The free-tier ceiling moved from ~5.5 study-hours/day to ~555.
+
+### AI answer edge cache: a repeated question costs zero tokens
+
+The Worker now caches the upstream reply in the Cloudflare Cache API (free, no KV/D1 usage) keyed by
+SHA-256 of `model + every message + sampling params`, 30-day TTL. Only a byte-for-byte identical
+repeat hits. A cache hit still decrements the user's quota and daily counter exactly like a miss, so
+the product behaviour is unchanged and only the model bill drops. Only successful upstream replies
+are cached (the clean upstream JSON; `dtt_*` fields are recomputed per response), and any Cache API
+failure silently falls through to a direct call.
+
+Live check against `dtt-backend` with the same prompt twice: the first call hit DeepSeek
+(`deepseek-flash`), the second returned `dtt_cached: true` with an identical answer and consumed no
+upstream tokens; `dtt_left` moved 9 -> 8 -> 7, confirming quota semantics are untouched. This sits
+on top of DeepSeek's own automatic prefix cache (cache-hit input is 1/50 of a miss).
 
 ## v88/v89: KV free-tier budget (the v87 regression)
 
