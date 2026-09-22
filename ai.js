@@ -192,19 +192,25 @@
     lines.push("");
     lines.push("ID: " + q.id + " · " + themeName(q, lang) + " / " + chapterName(q, lang) + " · " + q.pt + " pts");
     lines.push("Question (DE): " + q.qd);
-    lines.push("Question (EN): " + q.qe);
-    if (q.s) lines.push("Sentence stem (EN): " + q.s);
+    /* 题面/选项/解释都带上德语原文（官方权威），再加一份「读者语言」的对照。
+       德语读者不需要英文翻译（德语就是原文），中文读者优先用中文译文 —— 只留
+       必要的那一份，prompt 少一截，上游输入 token 也就少一截。 */
+    var zt = (lang === "zh" && window.__ZH && window.__ZH[q.id]) || null;
+    if (lang !== "de") lines.push("Question (" + (zt ? "ZH" : "EN") + "): " + (zt && zt.q ? zt.q : q.qe));
     if (q.sd) lines.push("Sentence stem (DE): " + q.sd);
+    if (q.s && lang !== "de") lines.push("Sentence stem (EN): " + q.s);
     if (q.oe.length) {
       for (var i = 0; i < q.oe.length; i++) {
-        lines.push(letter(i) + ". DE: " + q.od[i] + " | EN: " + q.oe[i]);
+        var alt = "";
+        if (lang !== "de") alt = " | " + (zt && zt.o && zt.o[i] ? "ZH: " + zt.o[i] : "EN: " + q.oe[i]);
+        lines.push(letter(i) + ". DE: " + q.od[i] + alt);
       }
       lines.push("Correct answer: " + officialAnswerText(q, "en"));
     } else {
       lines.push("Number question, correct answer: " + (q.num == null ? "—" : q.num));
     }
-    lines.push("Official explanation (EN): " + (q.ce || ""));
     if (q.cd) lines.push("Official explanation (DE): " + q.cd);
+    if (q.ce && lang !== "de") lines.push("Official explanation (EN): " + q.ce);
     lines.push("");
     lines.push("Answer language for every reply: " + name + ".");
     return lines.join("\n");

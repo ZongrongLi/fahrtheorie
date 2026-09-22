@@ -250,7 +250,8 @@
   }
   var isZh = function () { return prefs.uiLang === "zh"; };
   /* Interface languages — native names, so the picker reads the same for everyone.
-     Adding one = one entry here + one pack in i18n.js. */
+     Adding one = one entry here + one pack in i18n-more.js (English stays in i18n.js,
+     because it is also the fallback every other pack resolves against). */
   var UI_LANGS = [
     ["zh", "简体中文"], ["en", "English"], ["de", "Deutsch"], ["ru", "Русский"],
     ["tr", "Türkçe"], ["uk", "Українська"], ["pl", "Polski"], ["ro", "Română"],
@@ -305,6 +306,58 @@
   }
   window.__ensureZh = ensureZh;
   function needZh() { if (zhWanted()) ensureZh().then(function (ok) { if (ok) refresh(); }); }
+  /* data/questions.js 只带 B 照那 1262 题 —— 首屏从 720KB 砍到 409KB（gzip），
+     英文/德语用户最常走的路径不再为卡车/公交题付流量。剩下 1145 题在
+     data/questions-more.js，只有把「车型范围」切到「全部车型」时才拉回来，
+     并进 CAT_ALL / BY 后重渲染一次。 */
+  var allQLoad = null;
+  function catalogTotal() { return window.__CATALOG_ALL_COUNT || (CAT_ALL ? CAT_ALL.length : 0); }
+  function ensureAllQ() {
+    if (window.__CATALOG_MORE) return Promise.resolve(true);
+    if (allQLoad) return allQLoad;
+    allQLoad = new Promise(function (res) {
+      if (typeof document === "undefined") return res(false);
+      var s = document.createElement("script");
+      s.src = "data/questions-more.js" + (BUILD_V ? "?v=" + BUILD_V : "");
+      s.async = true;
+      s.onload = function () { res(!!window.__CATALOG_MORE); };
+      s.onerror = function () { res(false); };
+      document.head.appendChild(s);
+    }).then(function (ok) {
+      if (ok && window.__CATALOG_MORE) {
+        CAT_ALL = (CAT_ALL || []).concat(window.__CATALOG_MORE);
+        window.__CATALOG_MORE.forEach(function (q) { BY[q.id] = q; });
+        window.__CATALOG_ALL_COUNT = CAT_ALL.length;
+      }
+      return ok;
+    });
+    return allQLoad;
+  }
+  window.__ensureAllQ = ensureAllQ;
+  /* i18n.js 只带英文包（默认语言，也是所有语言包的兜底）。其余 9 个语言包在
+     i18n-more.js，只有界面语言不是英语时才拉 —— 首屏从 68KB 降到 7KB（gzip）。 */
+  var i18nLoad = null;
+  function ensureI18n() {
+    if (window.__I18N_ALL || prefs.uiLang === "en") return Promise.resolve(true);
+    if (i18nLoad) return i18nLoad;
+    i18nLoad = new Promise(function (res) {
+      if (typeof document === "undefined") return res(false);
+      var s = document.createElement("script");
+      s.src = "i18n-more.js" + (BUILD_V ? "?v=" + BUILD_V : "");
+      s.async = true;
+      s.onload = function () { res(!!window.I18N_MORE); };
+      s.onerror = function () { res(false); };
+      document.head.appendChild(s);
+    }).then(function (ok) {
+      if (ok && window.I18N_MORE) {
+        Object.keys(window.I18N_MORE).forEach(function (k) { window.I18N[k] = window.I18N_MORE[k]; });
+        window.__I18N_ALL = true;
+      }
+      return ok;
+    });
+    return i18nLoad;
+  }
+  window.__ensureI18n = ensureI18n;
   function zhOf(q) { return (window.__ZH && window.__ZH[q.id]) || null; }
   function zhTheme(th) { return (window.__ZH_THEME && window.__ZH_THEME[th]) || ""; }
   function zhChap(ch) { return (window.__ZH_CHAP && window.__ZH_CHAP[ch]) || ""; }
@@ -1359,7 +1412,7 @@
         '<p class="fineprint">' + esc(t("settings.langNote")) + '</p>' +
         seg(t("quiz.explLang"), "expllang", [["zh", t("lang.zh")], ["en", t("lang.en")], ["de", t("lang.de")]], prefs.explLang) +
         seg(t("settings.theme"), "theme", [["light", t("settings.themeLight")], ["dark", t("settings.themeDark")]], prefs.theme) +
-        seg(t("settings.scope"), "scope", [["b", t("scope.b") + " (" + (CAT_ALL ? CAT_ALL.filter(isClassB).length : 0) + ")"], ["all", t("scope.all") + " (" + (CAT_ALL ? CAT_ALL.length : 0) + ")"]], prefs.scope) +
+        seg(t("settings.scope"), "scope", [["b", t("scope.b") + " (" + (CAT_ALL ? CAT_ALL.filter(isClassB).length : 0) + ")"], ["all", t("scope.all") + " (" + catalogTotal() + ")"]], prefs.scope) +
         '<p class="fineprint">' + esc(t("scope.hint")) + '</p>') +
       card(t("settings.data"), '<p><strong>' + esc(t("settings.dataInfo", { n: CAT.length, img: img })) + '</strong></p>' +
         '<p class="muted">' + esc(t("home.dataNote")) + '</p>' +
@@ -1368,7 +1421,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v90 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v91 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1847,12 +1900,12 @@
   /* ---------------- events ---------------- */
   document.addEventListener("click", function (e) {
     var segBtn = e.target.closest("[data-seg] .seg-btn");
-    if (segBtn) { var name = segBtn.closest("[data-seg]").getAttribute("data-seg"); var key = name === "uilang" ? "uiLang" : name === "contentlang" ? "contentLang" : name === "expllang" ? "explLang" : name === "scope" ? "scope" : "theme"; prefs[key] = segBtn.getAttribute("data-val"); if (key === "explLang") { window.__explLang = prefs.explLang; window.__explManual = true; } if (key === "contentLang") { window.__explManual = false; needZh(); } savePrefs(); applyTheme(); buildIndex(); if (key === "scope") { applyScope(); route(); } else { document.getElementById("view").innerHTML = vSettings(); } return; }
+    if (segBtn) { var name = segBtn.closest("[data-seg]").getAttribute("data-seg"); var key = name === "uilang" ? "uiLang" : name === "contentlang" ? "contentLang" : name === "expllang" ? "explLang" : name === "scope" ? "scope" : "theme"; prefs[key] = segBtn.getAttribute("data-val"); if (key === "explLang") { window.__explLang = prefs.explLang; window.__explManual = true; } if (key === "contentLang") { window.__explManual = false; needZh(); } savePrefs(); applyTheme(); buildIndex(); if (key === "scope") { applyScope(); route(); if (prefs.scope === "all") ensureAllQ().then(function () { applyScope(); route(); renderTopbar(); }); } else if (key === "uiLang") { var relang = function () { localizeStatic(); renderTopbar(); document.getElementById("view").innerHTML = vSettings(); }; ensureI18n().then(relang, relang); } else { document.getElementById("view").innerHTML = vSettings(); } return; }
 
     var el = e.target.closest("[data-act]:not(select)");
     if (!el) { if (notifCache.open && !e.target.closest('[data-role="notifpanel"]')) { notifCache.open = false; notifPaint(); } return; }
     var act = el.getAttribute("data-act");
-    if (act === "ui-lang") { prefs.uiLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; refresh(); return; }
+    if (act === "ui-lang") { prefs.uiLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; ensureI18n().then(refresh, refresh); return; }
     if (act === "content-lang") { prefs.contentLang = el.getAttribute("data-val"); savePrefs(); aiHist = {}; needZh(); refresh(); return; }
     if (act === "expl-lang") { prefs.explLang = el.getAttribute("data-val"); window.__explLang = prefs.explLang; window.__explManual = true; savePrefs(); aiHist = {}; refresh(); return; }
     if (act === "notif-toggle") { notifToggle(); return; }
@@ -1972,7 +2025,8 @@
       savePrefs(); aiHist = {}; applyTheme(); buildIndex();
       toast(kind === "ui" ? langPickerName(prefs.uiLang) : t("lang." + prefs.contentLang));
       needZh();   // 切到中文刷题语言时把题面翻译拉进来，拉完自己重渲染
-      refresh();
+      if (kind === "ui") ensureI18n().then(refresh, refresh);   // 换界面语言要先等语言包到位
+      else refresh();
       return;
     }
     if (e.target.matches('[data-role="sp-qr"]')) {
@@ -2038,7 +2092,7 @@
     if (!v || !c) return;
     if (!CAT_ALL || !CAT_ALL.length) return;
     v.textContent = t("rail.bankVersion", { d: CATALOGUE_DATE });
-    c.textContent = t("rail.counts", { b: CAT_ALL.filter(isClassB).length, a: CAT_ALL.length });
+    c.textContent = t("rail.counts", { b: CAT_ALL.filter(isClassB).length, a: catalogTotal() });
   }
   function contentOptions() {
     return [["zhen", t("lang.zhen")], ["zh", t("lang.zh")], ["en", t("lang.en")], ["de", t("lang.de")]];
@@ -2082,7 +2136,7 @@
     var shell = document.getElementById("boot");
     try {
       if (!window.__CATALOG || !window.__CATALOG.length) throw new Error("no catalog");
-      CAT_ALL = window.__CATALOG;
+      CAT_ALL = window.__CATALOG.slice();   // B 照子集；「全部车型」另有一份懒加载
       BY = {}; CAT_ALL.forEach(function (q) { BY[q.id] = q; });
       applyScope();
     } catch (e) {
@@ -2093,6 +2147,7 @@
     document.getElementById("app").hidden = false;
     renderTopbar();
     route();
+    if (prefs.scope === "all") ensureAllQ().then(function () { applyScope(); route(); renderTopbar(); });
     window.addEventListener("hashchange", route);
     fsRestore();
     syncUser();
@@ -2110,7 +2165,12 @@
     setTimeout(function(){ reportProgress(true); }, 13000);
   }
   applyTheme();
-  localizeStatic();
   window.__boot = boot;
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+  /* 界面语言不是英语时，先把语言包拉回来再渲染首屏，避免先闪一下英文。
+     英语路径保持完全同步，行为和以前一模一样。 */
+  function start() {
+    localizeStatic();
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot();
+  }
+  if (prefs.uiLang === "en") start(); else ensureI18n().then(start, start);
 })();

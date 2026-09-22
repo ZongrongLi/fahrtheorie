@@ -79,3 +79,24 @@ test('the canned first prompt matches the target language', () => {
   assert.match(context.window.AI.askText('zh'), /简体中文/);
   assert.match(context.window.AI.askText('en'), /English/);
 });
+
+test('the German prompt carries no redundant English translation (token diet)', async () => {
+  const { context, requests } = load();
+  await context.window.AI.chat(QUESTION, [], 'warum?', 'de');
+  const system = requests[0].body.messages[0].content;
+  assert.doesNotMatch(system, /Question \(EN\)/);
+  assert.doesNotMatch(system, /Sentence stem \(EN\)/);
+  assert.doesNotMatch(system, /EN: /);
+  assert.doesNotMatch(system, /Official explanation \(EN\)/);
+  assert.match(system, /Question \(DE\): Womit muessen Sie rechnen\?/);
+  assert.match(system, /Official explanation \(DE\): Weil Fussgaenger/);
+});
+
+test('the Chinese prompt uses the Chinese translation instead of the English one', async () => {
+  const { context, requests } = load();
+  await context.window.AI.chat(QUESTION, [], '为什么?', 'zh');
+  const system = requests[0].body.messages[0].content;
+  assert.match(system, /Question \(ZH\): 中文题干/);
+  assert.match(system, /ZH: 中文选项/);
+  assert.doesNotMatch(system, /Question \(EN\)/);
+});

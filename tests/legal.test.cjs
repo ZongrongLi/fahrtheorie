@@ -15,9 +15,14 @@ const LEGAL_PAGES = ['privacy.html', 'terms.html'];
 function packs() {
   const saved = global.window;
   global.window = {};
-  delete require.cache[require.resolve('../i18n.js')];
-  require('../i18n.js');
-  const out = global.window.I18N;
+  /* i18n.js carries English (default + fallback); the other 9 packs are split into
+     i18n-more.js and lazy-loaded by app.js ensureI18n(). These guards are about the
+     content of the packs, so they read both files. */
+  for (const f of ['../i18n.js', '../i18n-more.js']) {
+    delete require.cache[require.resolve(f)];
+    require(f);
+  }
+  const out = Object.assign({}, global.window.I18N_MORE, global.window.I18N);
   global.window = saved;
   assert.ok(out, 'i18n.js must expose window.I18N');
   return out;
