@@ -9,6 +9,18 @@
    site is opened outside that preview; the offline engine always works. */
 (function () {
   var letter = function (i) { return String.fromCharCode(65 + i); };
+  /* The learner-facing order of the options. The catalogue lists correct answers
+     first; app.js passes the shuffled order it actually rendered, so every letter
+     in the prompt and in the answer matches what is on screen. */
+  function normOrder(q, order) {
+    var n = (q && q.oe && q.oe.length) ? q.oe.length : 0, out = [], seen = {};
+    if (order && order.length === n) {
+      for (var i = 0; i < n; i++) { var v = order[i]; if (v >= 0 && v < n && !seen[v]) { seen[v] = 1; out.push(v); } }
+    }
+    if (out.length !== n) { out = []; for (var j = 0; j < n; j++) out.push(j); }
+    return out;
+  }
+  function orderPosition(q, i, order) { var p = normOrder(q, order).indexOf(i); return p < 0 ? i : p; }
 
   /* Thematic knowledge base — safe, general driving knowledge keyed by theme
      number. Used to frame the discussion; never used to fabricate answers. */
@@ -75,22 +87,24 @@
   }
 
   /* ---------- Offline explanation engine ---------- */
-  function optionLine(q, i, lang) {
+  function optionLine(q, i, lang, pos) {
     var txt;
     if (lang === "zh") { var z = window.__ZH && window.__ZH[q.id]; txt = (z && z.o && z.o[i]) ? z.o[i] : q.oe[i]; }
     else if (lang === "de") txt = q.od[i];
     else txt = q.oe[i];
     var ok = q.ans.indexOf(i) >= 0;
-    return "- **" + letter(i) + ".** " + txt + "  —  " + (ok ? S("ok", lang) : S("bad", lang));
+    return "- **" + letter(pos == null ? i : pos) + ".** " + txt + "  —  " + (ok ? S("ok", lang) : S("bad", lang));
   }
 
-  function officialAnswerText(q, lang) {
+  function officialAnswerText(q, lang, order) {
     if (q.t === "num") return q.num == null ? "—" : String(q.num);
     if (!q.ans.length) return "—";
-    return q.ans.map(function (i) { return letter(i); }).join(S("answerSep", lang));
+    return q.ans.slice().sort(function (x, y) { return orderPosition(q, x, order) - orderPosition(q, y, order); })
+      .map(function (i) { return letter(orderPosition(q, i, order)); }).join(S("answerSep", lang));
   }
 
-  function answerLocal(q, query, lang, skipOfficial) {
+  function answerLocal(q, query, lang, skipOfficial, order) {
+    order = normOrder(q, order);
     var zh = lang === "zh";
     var hasQ = query && query.trim().length > 0;
     var ql = hasQ ? query.toLowerCase() : "";
@@ -102,10 +116,11 @@
       var m = ql.match(/(?:^|[^a-z])([a-d])(?:[^a-z]|$)/);
       if (m) asked = m[1].toUpperCase().charCodeAt(0) - 65;
     }
-    if (asked != null && q.oe && q.oe[asked] != null) {
-      var ok = q.ans.indexOf(asked) >= 0;
-      out.push(S("aboutOption", lang) + letter(asked));
-      out.push(optionLine(q, asked, lang));
+    if (asked != null && asked < order.length) {
+      var askedPos = asked, askedIdx = order[askedPos];
+      var ok = q.ans.indexOf(askedIdx) >= 0;
+      out.push(S("aboutOption", lang) + letter(askedPos));
+      out.push(optionLine(q, askedIdx, lang, askedPos));
       out.push(ok ? S("isCorrect", lang) : S("notCorrect", lang));
     }
 
@@ -124,8 +139,8 @@
     // 3) Option-by-option analysis (choice questions only)
     if (q.od && q.od.length) {
       out.push(S("optionHead", lang));
-      for (var i = 0; i < q.oe.length; i++) out.push(optionLine(q, i, lang));
-      out.push(S("correctHead", lang) + "**" + officialAnswerText(q, lang) + "**");
+      for (var p = 0; p < order.length; p++) out.push(optionLine(q, order[p], lang, p));
+      out.push(S("correctHead", lang) + "**" + officialAnswerText(q, lang, order) + "**");
     } else if (q.t === "num") {
       out.push(S("answerHead", lang));
       out.push(S("numExplain", lang) + (q.num == null ? "—" : q.num) + "**.");
@@ -179,7 +194,7 @@
     return h;
   }
 
-  function sysPrompt(q, lang) {
+  function sysPrompt(q, lang, order) {
     var name = S("langName", lang) || "English";
     var lines = [];
     lines.push("You are a tutor for the German driving-theory exam (Führerschein Theorieprüfung). "
@@ -200,12 +215,13 @@
     if (q.sd) lines.push("Sentence stem (DE): " + q.sd);
     if (q.s && lang !== "de") lines.push("Sentence stem (EN): " + q.s);
     if (q.oe.length) {
-      for (var i = 0; i < q.oe.length; i++) {
-        var alt = "";
-        if (lang !== "de") alt = " | " + (zt && zt.o && zt.o[i] ? "ZH: " + zt.o[i] : "EN: " + q.oe[i]);
-        lines.push(letter(i) + ". DE: " + q.od[i] + alt);
+      var qord = normOrder(q, order);
+      for (var p = 0; p < qord.length; p++) {
+        var oi = qord[p], alt = "";
+        if (lang !== "de") alt = " | " + (zt && zt.o && zt.o[oi] ? "ZH: " + zt.o[oi] : "EN: " + q.oe[oi]);
+        lines.push(letter(p) + ". DE: " + q.od[oi] + alt);
       }
-      lines.push("Correct answer: " + officialAnswerText(q, "en"));
+      lines.push("Correct answer: " + officialAnswerText(q, "en", qord));
     } else {
       lines.push("Number question, correct answer: " + (q.num == null ? "—" : q.num));
     }
@@ -216,15 +232,15 @@
     return lines.join("\n");
   }
 
-  function chat(q, history, query, lang) {
+  function chat(q, history, query, lang, order) {
     var c = cfg();
     if (!hasLLM()) return Promise.reject({ kind: "nokey" });
     /* 中文题面翻译是懒加载的（data/zh.js，280KB）。要用中文提问就先等它到位，
        否则 prompt 里的题目会退回英文，而模型被要求用中文回答，质量会掉。 */
     if (lang === "zh" && window.__ensureZh) {
-      return window.__ensureZh().then(function () { return chat(q, history, query, lang); });
+      return window.__ensureZh().then(function () { return chat(q, history, query, lang, order); });
     }
-    var msgs = [{ role: "system", content: sysPrompt(q, lang) }];
+    var msgs = [{ role: "system", content: sysPrompt(q, lang, order) }];
     (history || []).slice(-8).forEach(function (m) {
       msgs.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.text });
     });

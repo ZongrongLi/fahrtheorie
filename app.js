@@ -404,6 +404,39 @@
   /* ---------------- helpers ---------------- */
   function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]; }); }
   function L(i) { return String.fromCharCode(65 + i); }
+
+  /* ---------------- option order ----------------
+     The official catalogue lists the correct answers first ("Die richtigen Antworten
+     sind zuerst aufgeführt"), but the real PC exam rotates them. We keep the canonical
+     arrays (and every stored answer index) untouched and only shuffle the display order.
+     Practice uses one stable shuffle per question so cached AI text and saved answers
+     stay valid; an exam gets its own random seed, so every attempt differs. */
+  var ordCache = {};
+  function optionCount(q) { return (q && q.oe && q.oe.length) ? q.oe.length : ((q && q.od) ? q.od.length : 0); }
+  function identityOrder(q) { var n = optionCount(q), r = []; for (var i = 0; i < n; i++) r.push(i); return r; }
+  function orderSeed() { return (session && session.seed) ? String(session.seed) : "catalog-shuffle-v1"; }
+  function shuffleOrder(q, seed) {
+    var n = optionCount(q), ord = identityOrder(q);
+    if (n < 2) return ord;
+    var str = String((q && q.id) || "") + "|" + String(seed || "");
+    var h = 2166136261 >>> 0;
+    for (var i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+    if (!h) h = 0x9e3779b9;
+    function rnd() { h ^= h << 13; h >>>= 0; h ^= h >>> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; }
+    for (var k = n - 1; k > 0; k--) { var j = Math.floor(rnd() * (k + 1)); var t = ord[k]; ord[k] = ord[j]; ord[j] = t; }
+    var same = true; for (var m = 0; m < n; m++) if (ord[m] !== m) { same = false; break; }
+    if (same) { var t2 = ord[0]; ord[0] = ord[n - 1]; ord[n - 1] = t2; }   // never show the catalogue order by accident
+    return ord;
+  }
+  function qOrder(q) {
+    if (!q || !optionCount(q)) return [];
+    var seed = orderSeed(), key = String(q.id) + "|" + seed;
+    if (!ordCache[key]) ordCache[key] = shuffleOrder(q, seed);
+    return ordCache[key];
+  }
+  function ordKey(q) { return qOrder(q).join(""); }
+  function orderPos(q, i) { var p = qOrder(q).indexOf(i); return p < 0 ? i : p; }
+  function orderLetter(q, i) { return L(orderPos(q, i)); }
   function today() { var d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); }
   function md(s) {
     var out = esc(s).split(/\n{2,}/).map(function (b) {
@@ -650,7 +683,7 @@
   function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t2 = a[i]; a[i] = a[j]; a[j] = t2; } return a; }
   function openSession(ids, opts) {
     ids = (ids || []).filter(function (id) { return !!BY[id]; });
-    session = { ids: ids, i: 0, mode: opts.mode || "normal", key: opts.key || "", title: opts.title || "", from: opts.c && opts.c !== "ALL" ? "categories" : "", answers: {}, startedAt: Date.now() };
+    session = { ids: ids, i: 0, mode: opts.mode || "normal", key: opts.key || "", title: opts.title || "", from: opts.c && opts.c !== "ALL" ? "categories" : "", answers: {}, startedAt: Date.now(), seed: opts.seed || "" };
     return session;
   }
 
@@ -923,14 +956,14 @@
       opts = '<div class="num-input"><label for="num-' + esc(q.id) + '">' + esc(t("quiz.numberHint")) + '</label>' +
         '<input id="num-' + esc(q.id) + '" type="number" inputmode="numeric" data-role="numinput" value="' + esc(a.val) + '"' + (a.submitted ? " disabled" : "") + ' placeholder="0"></div>';
     } else {
-      opts = '<ul class="opts' + (q.t === "multi" ? " multi" : "") + '">' + q.oe.map(function (o, i) {
+      opts = '<ul class="opts' + (q.t === "multi" ? " multi" : "") + '">' + qOrder(q).map(function (i, p) {
         var on = a.sel.indexOf(i) >= 0;
         var cls = "opt" + (on ? " on" : "");
         if (a.submitted) { if (q.ans.indexOf(i) >= 0) cls += " right"; else if (on) cls += " bad"; }
         return '<li class="' + cls + '" data-act="opt" data-i="' + i + '" role="button" tabindex="0" aria-pressed="' + on + '">' +
           '<span class="box" aria-hidden="true">' + (q.t === "multi" ? ic("check") : "") + '</span>' +
           '<span class="opt-body">' + stackText(q, "o", i) + '</span>' +
-          '<span class="badge-k">' + L(i) + '</span></li>';
+          '<span class="badge-k">' + L(p) + '</span></li>';
       }).join("") + '</ul>';
     }
 
@@ -951,8 +984,8 @@
 
   function feedbackBlock(q, a) {
     var ok = a.correct;
-    var your = q.t === "num" ? (a.val || "—") : (a.sel.length ? a.sel.sort(function (x, y) { return x - y; }).map(L).join(", ") : "—");
-    var right = q.t === "num" ? (q.num == null ? "—" : q.num) : q.ans.map(L).join(", ");
+    var your = q.t === "num" ? (a.val || "—") : (a.sel.length ? a.sel.slice().sort(function (x, y) { return orderPos(q, x) - orderPos(q, y); }).map(function (i) { return orderLetter(q, i); }).join(", ") : "—");
+    var right = q.t === "num" ? (q.num == null ? "—" : q.num) : q.ans.slice().sort(function (x, y) { return orderPos(q, x) - orderPos(q, y); }).map(function (i) { return orderLetter(q, i); }).join(", ");
     return '<div class="feedback ' + (ok ? "ok" : "no") + '" role="status">' +
       '<div class="fb-head">' + (ok ? ic("check") + esc(t("quiz.correct")) : ic("x") + esc(t("quiz.wrong"))) + '</div>' +
       '<div class="fb-row"><span>' + esc(t("quiz.yourAnswer")) + '</span><b>' + esc(your) + '</b></div>' +
@@ -1189,7 +1222,7 @@
     if (aiHist[q.id]) return aiHist[q.id];
     var hist = [];
     var c = state.ai[q.id];
-    if (c && c.text && c.lang && c.lang !== aiLang()) c = null;   // cached in another language -> regenerate
+    if (c && c.text && !(c.lang === aiLang() && c.ord === ordKey(q))) c = null;   // another language or option order -> regenerate
     if (c && c.text) {
       hist.push({ role: "assistant", text: c.text });
       (c.qa || []).forEach(function (p) { hist.push({ role: "user", text: p.q }); hist.push({ role: "assistant", text: p.a }); });
@@ -1197,23 +1230,24 @@
     aiHist[q.id] = hist;
     return hist;
   }
-  function aiHas(q) { var c = state.ai[q.id]; return !!(c && c.text && (!c.lang || c.lang === aiLang())); }
+  function aiHas(q) { var c = state.ai[q.id]; return !!(c && c.text && c.lang === aiLang() && c.ord === ordKey(q)); }
   function aiGenerate(q) {
     if (!q) return;
     var hist = aiHist[q.id] || (aiHist[q.id] = []);
     if (hist.length) return;
-    var offline = window.AI.answerLocal(q, "", aiLang(), true);
+    var ord = qOrder(q);
+    var offline = window.AI.answerLocal(q, "", aiLang(), true, ord);
     hist.push({ role: "assistant", text: t("ai.generating") });
     if (session) rerenderQuiz();
     var done = function (txt) {
       var out = txt || offline;
       var c = state.ai[q.id] || (state.ai[q.id] = {});
-      c.text = out; c.at = Date.now(); c.lang = aiLang(); c.qa = []; saveState();
+      c.text = out; c.at = Date.now(); c.lang = aiLang(); c.ord = ordKey(q); c.qa = []; saveState();
       aiHist[q.id] = [{ role: "assistant", text: out }];
       if (session) rerenderQuiz();
     };
     if (window.AI.hasLLM()) {
-      window.AI.chat(q, [], window.AI.askText(aiLang()), aiLang()).then(function (r) { done(r); }, function () { done(offline); });
+      window.AI.chat(q, [], window.AI.askText(aiLang()), aiLang(), ord).then(function (r) { done(r); }, function () { done(offline); });
     } else {
       setTimeout(function () { done(offline); }, 200);
     }
@@ -1326,10 +1360,10 @@
 
     var opts = q.t === "num"
       ? '<div class="num-input"><label>' + esc(t("quiz.numberHint")) + '</label><input type="number" data-role="numinput" value="' + esc(a.val) + '"></div>'
-      : '<ul class="opts' + (q.t === "multi" ? " multi" : "") + '">' + q.oe.map(function (o, i) {
+      : '<ul class="opts' + (q.t === "multi" ? " multi" : "") + '">' + qOrder(q).map(function (i, p) {
           var on = a.sel.indexOf(i) >= 0;
           return '<li class="opt' + (on ? " on" : "") + '" data-act="opt" data-i="' + i + '" role="button" tabindex="0" aria-pressed="' + on + '">' +
-            '<span class="box">' + (q.t === "multi" ? ic("check") : "") + '</span><span class="opt-body">' + stackText(q, "o", i) + '</span><span class="badge-k">' + L(i) + '</span></li>';
+            '<span class="box">' + (q.t === "multi" ? ic("check") : "") + '</span><span class="opt-body">' + stackText(q, "o", i) + '</span><span class="badge-k">' + L(p) + '</span></li>';
         }).join("") + '</ul>';
     return '<section class="quiz exam"><header class="quiz-top">' +
       '<button class="iconbtn" data-act="exam-abort" title="' + esc(t("exam.abort")) + '">' + ic("x") + '</button>' +
@@ -1421,7 +1455,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v92 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v93 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
@@ -1868,18 +1902,18 @@
       var p = document.querySelector('[data-role="pending"]'); if (p) p.remove();
       hist.push({ role: "assistant", text: answer });
       var cc = state.ai[q.id] || (state.ai[q.id] = {});
-      cc.lang = aiLang(); cc.qa = cc.qa || []; cc.qa.push({ q: text, a: answer }); saveState();
+      cc.lang = aiLang(); cc.ord = ordKey(q); cc.qa = cc.qa || []; cc.qa.push({ q: text, a: answer }); saveState();
       if (container) { container.insertAdjacentHTML("beforeend", '<div class="msg assistant"><div class="bubble md">' + md(answer) + "</div></div>"); container.scrollTop = container.scrollHeight; }
     }
     if (window.AI.hasLLM()) {
-      window.AI.chat(q, hist.slice(0, -1), text, aiLang())
+      window.AI.chat(q, hist.slice(0, -1), text, aiLang(), qOrder(q))
         .then(function (r) { done(r || "(empty)"); })
         .catch(function (e) {
-          var base = window.AI.answerLocal(q, text, aiLang());
+          var base = window.AI.answerLocal(q, text, aiLang(), false, qOrder(q));
           done((e && e.kind === "http" ? t("ai.errHttp", { msg: e.msg }) + "\n\n" : "") + base);
         });
     } else {
-      setTimeout(function () { done(window.AI.answerLocal(q, text, aiLang())); }, 180);
+      setTimeout(function () { done(window.AI.answerLocal(q, text, aiLang(), false, qOrder(q))); }, 180);
     }
   }
   function aiTranslate(q) {
@@ -2056,7 +2090,7 @@
   function gradeAndShowExam() { gradeExam(); clearInterval(window.__examTick); rerenderQuiz(); }
   function startExam() {
     var ids = shuffle(CAT.filter(function (q) { return q.t !== "num"; })).slice(0, 30).map(function (q) { return q.id; });
-    session = { ids: ids, i: 0, mode: "exam", answers: {}, startedAt: Date.now(), durationMs: 45 * 60 * 1000, graded: false };
+    session = { ids: ids, i: 0, mode: "exam", answers: {}, startedAt: Date.now(), durationMs: 45 * 60 * 1000, graded: false, seed: "x" + Math.random().toString(36).slice(2) + Date.now().toString(36) };
     if (location.hash === "#/exam") route(); else go("#/exam");
     clearInterval(window.__examTick);
     window.__examTick = setInterval(function () {
