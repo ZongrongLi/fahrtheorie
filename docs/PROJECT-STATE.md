@@ -456,6 +456,9 @@ that API expansion is not a reliable "no bank configured" signal.
 
 ## Verification evidence
 
+- 2026-09-25 account entitlement: `user:u25b0d38yv2` (`389006500@qq.com`) set to
+  `unlimited:true` with `paidAt`; `GET /api/me` returned `unlimited:true`, and the update was
+  read back from the remote KV record.
 - Front end: `node tests/startup.test.cjs` 33, `tests/ai-lang.test.cjs` 6, `tests/legal.test.cjs` 12 -> **51 passed, 0 failed**.
   Run the three files individually - `node --test tests/` (directory form) does not work in this repo.
 - v69 verified live: `refunds.html` returns 404 and zero refund words remain in `index.html`, `app.js`,
@@ -492,8 +495,10 @@ that API expansion is not a reliable "no bank configured" signal.
   `/storage/kv/namespaces/f69474f8…/keys`): the namespace really holds **8 keys** - three each for the two real
   accounts (`389006500@qq.com`, `tiancai110a@gmail.com`) plus two stale `uid:`/`tok:` keys left when the
   owner's own account was recreated (both point at the same email, harmless). **No throwaway account survives.**
-  `user:389006500@qq.com` currently has **no `unlimited` field**, so the owner can pay again - which matches what
-  the live UI does. Always pass `--remote` (or use REST) when checking or clearing KV.
+  `user:389006500@qq.com` (canonical key `user:u25b0d38yv2`) was manually set to `unlimited:true`
+  with `paidAt` on 2026-09-25, and `GET /api/me` immediately returned `unlimited:true`. The client
+  mirrors the server flag on the next load. Always pass `--remote` (or use REST) when checking or
+  clearing KV.
 
 ## Open items
 
