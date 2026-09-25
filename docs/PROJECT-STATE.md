@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-22 (Europe/Berlin). Live build: **v92**.
+Snapshot date: 2026-09-25 (Europe/Berlin). Live build: **v93**.
 
 ## Where things live
 
@@ -675,3 +675,35 @@ users. When that happens the options are Workers Paid ($5/mo, 1M writes/month) o
 progress simply stops persisting and the UI shows nothing.
 
 ## v86: notification bell (@mentions + welcome), 5s comment window, AI daily cap
+
+## v93: option order is shuffled like the real exam
+
+The catalogue lists the correct answers first ("Die richtigen Antworten sind zuerst aufgeführt"), and
+the app rendered that order verbatim, so the right answer was always among the top two or three boxes.
+The real PC exam rotates the answers instead - the Prüfungsrichtlinie Anlage 1 says "In der Prüfung ist
+die Reihenfolge der Antworten beliebig", and the TÜV|DEKRA booklet says the answers "rollieren nach dem
+Zufallsprinzip". The question data was never wrong; only the display was.
+
+Measured on the B catalogue (1262 questions): 431 single-choice have `ans:[0]`, 579 multiple-choice
+`ans:[0,1]`, 212 `ans:[0,1,2]` - a continuous prefix in 100% of cases, which is why the flaw looked so
+systematic.
+
+Fix: a display order only. `qOrder(q)` returns a permutation built from a seeded Fisher-Yates (FNV-1a
+hash + xorshift, stable per question id + seed); if the permutation lands on the identity it swaps the
+first and last entry so the catalogue order is never shown. The canonical `q.oe`/`q.od`/`q.ans` arrays
+and the `data-i` answer indices are untouched, so grading, the wrong-answer book and progress sync need
+no changes at all. Practice uses one fixed seed (`catalog-shuffle-v1`) so cached AI text and saved
+answers stay valid; a mock exam gets a fresh random seed, so every attempt differs. Feedback, the AI
+prompt, the offline answer engine and the cached AI text now use the displayed letters and regenerate
+when the order changes.
+
+Evidence: new `tests/option-order.test.cjs` (4 tests: permutation + >90% genuinely moved, seed
+stability + canonical data intact, different exam seeds differ, prompt uses displayed letters). Front
+end suite is **100/100** (ai-lang 8, identity 3, lazyallq 5, lazyi18n 6, lazyzh 4, legal 18, notif 5,
+option-order 4, progress 11, startup 36). Browser run against local 8123: practice question
+`1.1.02-109-B` (`ans:[0,1]`) rendered `[2,1,0]`, so the correct answers show as **B, C**; a 30-question
+mock exam showed the correct positions scattered (`1.2.03-106` answer **C**, `1.1.01-109` `[1,2]`,
+`1.4.42-145` `[0,1,2]`) and answering the true index set gave **100/100, 0 error points, Passed** - the
+grading is provably independent of the display order. The AI explanation returned
+`Correct Answers: **B, C**` with the cached `ord:"210"` matching the screen. Live: `build v93` and
+`app.js?v=93` both read back, and production renders `1.1.02-109-B` as `[2:A, 1:B, 0:C]`.
