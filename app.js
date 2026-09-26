@@ -410,7 +410,12 @@
      sind zuerst aufgeführt"), but the real PC exam rotates them. We keep the canonical
      arrays (and every stored answer index) untouched and only shuffle the display order.
      Practice uses one stable shuffle per question so cached AI text and saved answers
-     stay valid; an exam gets its own random seed, so every attempt differs. */
+     stay valid; an exam gets its own random seed, so every attempt differs.
+     The shuffle must stay a true uniform permutation: every position is equally likely,
+     so the catalogue order itself still appears with its natural probability (1/n! for
+     n options). Forcing that case away would bias one slot - it used to push every
+     identity permutation into "first option wrong", which is why single-choice answers
+     landed in slot A only ~1/6 of the time instead of ~1/3. */
   var ordCache = {};
   function optionCount(q) { return (q && q.oe && q.oe.length) ? q.oe.length : ((q && q.od) ? q.od.length : 0); }
   function identityOrder(q) { var n = optionCount(q), r = []; for (var i = 0; i < n; i++) r.push(i); return r; }
@@ -424,8 +429,6 @@
     if (!h) h = 0x9e3779b9;
     function rnd() { h ^= h << 13; h >>>= 0; h ^= h >>> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; }
     for (var k = n - 1; k > 0; k--) { var j = Math.floor(rnd() * (k + 1)); var t = ord[k]; ord[k] = ord[j]; ord[j] = t; }
-    var same = true; for (var m = 0; m < n; m++) if (ord[m] !== m) { same = false; break; }
-    if (same) { var t2 = ord[0]; ord[0] = ord[n - 1]; ord[n - 1] = t2; }   // never show the catalogue order by accident
     return ord;
   }
   function qOrder(q) {
@@ -1455,7 +1458,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v93 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v94 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {

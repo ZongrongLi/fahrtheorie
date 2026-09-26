@@ -59,9 +59,10 @@ function loadApp() {
   return { context, questions: context.window.__CATALOG };
 }
 
-test('every displayed order is a permutation and differs from the catalogue order', () => {
+test('every displayed order is a permutation and the shuffle stays unbiased', () => {
   const { context, questions } = loadApp();
-  let moved = 0, optioned = 0;
+  let optioned = 0;
+  const groups = new Map();
   for (const q of questions) {
     const n = (q.oe || q.od || []).length;
     if (!n) continue;
@@ -69,25 +70,69 @@ test('every displayed order is a permutation and differs from the catalogue orde
     const ord = context.window.testQOrder(q);
     assert.equal(ord.length, n, q.id + ': order length');
     assert.equal(ord.slice().sort((a, b) => a - b).join(','), Array.from({ length: n }, (_, i) => i).join(','), q.id + ': permutation');
-    if (ord.some((v, i) => v !== i)) moved++;
     for (let i = 0; i < n; i++) {
       assert.equal(ord[context.window.testOrderPos(q, i)], i, q.id + ': position mapping');
     }
+    const key = n + '|' + q.ans.join(',');
+    if (!groups.has(key)) groups.set(key, { n, k: q.ans.length, count: 0, first: 0, ident: 0, posOf0: {} });
+    const g = groups.get(key);
+    g.count++;
+    if (q.ans.indexOf(ord[0]) >= 0) g.first++;
+    if (ord.every((v, i) => v === i)) g.ident++;
+    ord.forEach((orig, p) => { if (orig === 0) g.posOf0[p] = (g.posOf0[p] || 0) + 1; });
   }
   assert.ok(optioned > 0, 'the catalogue needs option questions');
-  assert.ok(moved > optioned * 0.9, `almost every question must move options, only ${moved}/${optioned} did`);
+
+  /* The 3-option groups are large enough to catch a systematic bias. A correct answer
+     in the first slot must show up with the probability the true ratio implies (1/3 for
+     single choice, 2/3 when two of three are correct), and canonical option 0 must be
+     spread evenly over all three slots. The catalogue order itself must still be allowed
+     to occur: forbidding it biases precisely the first slot, which was the v93 bug. */
+  let checked = 0;
+  for (const g of groups.values()) {
+    if (g.count < 30) continue;
+    checked++;
+    const expected = g.k / g.n;
+    const firstRatio = g.first / g.count;
+    assert.ok(Math.abs(firstRatio - expected) < 0.1,
+      `group n${g.n} k${g.k}: first slot holds a correct answer ${(firstRatio * 100).toFixed(1)}%, expected about ${(expected * 100).toFixed(1)}%`);
+    const identRatio = g.ident / g.count;
+    const expectedIdent = 1 / (g.n === 3 ? 6 : 2);
+    assert.ok(Math.abs(identRatio - expectedIdent) < 0.18,
+      `group n${g.n} k${g.k}: catalogue order occurs ${(identRatio * 100).toFixed(1)}% of the time, expected about ${(expectedIdent * 100).toFixed(1)}%`);
+    if (g.n === 3) {
+      for (let p = 0; p < 3; p++) {
+        const ratio = (g.posOf0[p] || 0) / g.count;
+        assert.ok(ratio > 0.22 && ratio < 0.45,
+          `group n3 k${g.k}: canonical option 0 lands in slot ${p} ${(ratio * 100).toFixed(1)}% of the time, expected about 33.3%`);
+      }
+    }
+  }
+  assert.ok(checked >= 3, `expected several large groups, only checked ${checked}`);
 });
 
-test('the stable practice order is deterministic and keeps canonical answers intact', () => {
+test('the stable practice order is deterministic, keeps canonical answers intact and still allows the catalogue order', () => {
   const { context, questions } = loadApp();
   const q = questions.find((x) => (x.oe || []).length === 3 && x.ans.length === 1);
   const beforeAns = q.ans.slice(), beforeOe = q.oe.slice();
   const a = context.window.testShuffleOrder(q, 'practice');
   const b = context.window.testShuffleOrder(q, 'practice');
   assert.deepEqual(a, b, 'same seed must produce the same order');
-  assert.notDeepEqual(a, [0, 1, 2], 'single-choice questions must not keep the catalogue order');
   assert.deepEqual(q.ans, beforeAns, 'canonical answer indices must not change');
   assert.deepEqual(q.oe, beforeOe, 'canonical option text must not change');
+
+  /* An identity permutation is a legitimate random outcome. It must not be rewritten,
+     because rewriting every identity into a swap removes an entire set of permutations
+     from one slot and makes that slot systematically wrong. */
+  let identities = 0, threeOption = 0;
+  for (const x of questions) {
+    if ((x.oe || []).length !== 3) continue;
+    threeOption++;
+    const ord = context.window.testShuffleOrder(x, 'practice');
+    if (ord.every((v, i) => v === i)) identities++;
+  }
+  assert.ok(threeOption > 100, 'need three-option questions');
+  assert.ok(identities > threeOption * 0.08, `identity permutations almost never occur (${identities}/${threeOption})`);
 });
 
 test('different exam seeds produce different orders', () => {
