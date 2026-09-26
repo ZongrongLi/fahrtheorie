@@ -1,6 +1,6 @@
 # Project state snapshot
 
-Snapshot date: 2026-09-25 (Europe/Berlin). Live build: **v93**.
+Snapshot date: 2026-09-26 (Europe/Berlin). Live build: **v94**.
 
 ## Where things live
 
@@ -689,10 +689,10 @@ Measured on the B catalogue (1262 questions): 431 single-choice have `ans:[0]`, 
 systematic.
 
 Fix: a display order only. `qOrder(q)` returns a permutation built from a seeded Fisher-Yates (FNV-1a
-hash + xorshift, stable per question id + seed); if the permutation lands on the identity it swaps the
-first and last entry so the catalogue order is never shown. The canonical `q.oe`/`q.od`/`q.ans` arrays
-and the `data-i` answer indices are untouched, so grading, the wrong-answer book and progress sync need
-no changes at all. Practice uses one fixed seed (`catalog-shuffle-v1`) so cached AI text and saved
+hash + xorshift, stable per question id + seed). The canonical `q.oe`/`q.od`/`q.ans` arrays and the
+`data-i` answer indices are untouched, so grading, the wrong-answer book and progress sync need no
+changes at all. v93 also rewrote the identity permutation (swapped first and last) so the catalogue
+order could never appear - that turned out to be a systematic bug and was removed in v94, see below. Practice uses one fixed seed (`catalog-shuffle-v1`) so cached AI text and saved
 answers stay valid; a mock exam gets a fresh random seed, so every attempt differs. Feedback, the AI
 prompt, the offline answer engine and the cached AI text now use the displayed letters and regenerate
 when the order changes.
@@ -707,3 +707,32 @@ mock exam showed the correct positions scattered (`1.2.03-106` answer **C**, `1.
 grading is provably independent of the display order. The AI explanation returned
 `Correct Answers: **B, C**` with the cached `ord:"210"` matching the screen. Live: `build v93` and
 `app.js?v=93` both read back, and production renders `1.1.02-109-B` as `[2:A, 1:B, 0:C]`.
+
+## v94: the shuffle had to be truly uniform
+
+v93's extra rule - whenever the random permutation came out identical to the catalogue order, swap the
+first and last option - was meant to make the rotation look more convincing. It instead removed one
+sixth of all permutations from the first slot. Measured on the v93 code: single-choice questions put
+the correct answer in slot A only **15.5%** of the time (should be ~33%), and for two-of-three
+questions slot A contained a correct answer only **16.2%** of the time (should be ~67%). The bulk of the
+identity permutations became "first option wrong", so the first option read as systematically wrong.
+
+v94 deletes that rewrite and keeps a plain seeded Fisher-Yates (FNV-1a hash plus xorshift). The
+catalogue order is allowed to appear with its natural probability, 1/n! for n options. Nothing else
+changed: canonical arrays and stored indices are untouched, practice keeps one stable order per
+question, and every mock exam keeps its own random seed.
+
+The regression test changed with it: instead of asserting that nearly every question must move, it now
+checks the distribution. Across the B catalogue slot A holds a correct answer **32.9%** for
+single-choice (theory 33.3%), **66.1%** for two-of-three questions (theory 66.7%), and 100% for
+three-of-three; the catalogue order appears **15.8%** of the time (theory 16.7%); every canonical
+option lands in each of the three slots between 22% and 45% of the time. A dedicated assertion requires
+identity permutations to actually occur, so the v93 bug cannot come back.
+
+Front end suite: 100/100. Live `build v94` and `app.js?v=94` read back, and the old force-identity
+string is gone from production. A 420-question production walk measured **39.8%** of single-choice
+questions with the correct answer in slot A and **63.7%** of two-of-three questions with a correct
+answer in slot A, including natural catalogue orders such as `1.1.01-103[012]` and `1.1.01-108[012]`.
+
+Lesson recorded: rewriting a random outcome because it "looks too ordered" creates a worse systematic
+bias than not shuffling at all. Shuffle cleanly and let the edge cases keep their true probability.
