@@ -615,6 +615,13 @@ not done.
 - `putProg()` / `aiUsed()` / `aiSetUsed()` use D1 upserts; new progress writes no longer touch KV.
 - Backend tests 183 -> **199/199** (a D1 test double that executes the SQL semantics, plus migration
   and fallback cases).
+- 2026-09-28: the AI quota (`left`) moved to a new D1 table `quota(uid, left_num)` for the same reason:
+  every AI call used to run a full `saveUser` (6 KV puts + 2 KV deletes, even on edge-cache hits), so
+  10 users x 10 free AI answers burned 600 writes + 200 deletes in a day. The rule is: a `quota` row
+  wins when present, otherwise the KV `left` value applies (zero migration for old accounts, KV fallback
+  when D1 is down). The unconditional legacy-key deletes in `saveShapedUser` are gone too; a legacy key
+  is deleted exactly once, when it is actually hit and migrated. Backend tests 199 -> **213/213**.
+  (Not yet deployed at the time of writing; needs `wrangler login` + schema run + deploy.)
 
 Live check with a throwaway account: after writing progress, the row appeared in D1 and **no new
 `prog:` key appeared in KV**. The free-tier ceiling moved from ~5.5 study-hours/day to ~555.
