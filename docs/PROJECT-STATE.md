@@ -621,7 +621,29 @@ not done.
   wins when present, otherwise the KV `left` value applies (zero migration for old accounts, KV fallback
   when D1 is down). The unconditional legacy-key deletes in `saveShapedUser` are gone too; a legacy key
   is deleted exactly once, when it is actually hit and migrated. Backend tests 199 -> **213/213**.
-  (Not yet deployed at the time of writing; needs `wrangler login` + schema run + deploy.)
+  (Deployed 2026-09-28, Worker `907a81d2`; the `quota` table was created remotely first.)
+
+### The real KV killer was `list`, not writes
+
+The usage graph for 2026-09-26 settled it: writes **0**, deletes **0**, but `list` **640** of the
+1,000/day allowance - and one single minute at 08:10 UTC recorded **436 lists against 14 reads**.
+That ratio is the signature of "one list per question rendered". `GET /api/comments` used
+`list({prefix: "c:<qid>:"})` to fetch a question's comments and did so **even when the question had no
+comments at all**, and the front end calls it for every question it renders. Fast browsing alone burned
+the daily allowance - no AI involved. This is the same anti-pattern that was fixed for notifications in
+v88/v89; comments were missed.
+
+Fix: comments moved to a **single key per question**, `c:<qid>` holding an array (capped at 200). Reads
+cost one `get` and zero lists. The old per-comment keys are collapsed by a one-time global migration
+guarded by a `cmig` marker, so once it has run the read path never lists again. Parent lookups and the
+admin delete path go through the same key. Backend tests 213 -> **223/223**.
+
+Live evidence: the 7 legacy keys collapsed into 2 single keys (`c:1.1.04-111`, `c:1.1.05-001`) with
+author names still resolved; then **60 question reads left `list` at 8 and `write` at 10 while `read`
+rose by exactly 60**.
+
+Lesson: the "list a prefix as a query" anti-pattern was hiding in two features. KV lists are capped at
+1,000/day, so any read path that runs on every render needs a unit test asserting zero lists.
 
 Live check with a throwaway account: after writing progress, the row appeared in D1 and **no new
 `prog:` key appeared in KV**. The free-tier ceiling moved from ~5.5 study-hours/day to ~555.
