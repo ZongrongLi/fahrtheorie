@@ -765,3 +765,43 @@ answer in slot A, including natural catalogue orders such as `1.1.01-103[012]` a
 
 Lesson recorded: rewriting a random outcome because it "looks too ordered" creates a worse systematic
 bias than not shuffling at all. Shuffle cleanly and let the edge cases keep their true probability.
+
+## v95: a Chinese AI question froze the whole page
+
+Reported as "I send one AI question and the entire page locks up". Reproduced live with a throwaway
+account (question language and explanation language set to Chinese): after clicking **AI explanation**
+the renderer's main thread stopped answering - `Runtime.evaluate`, `Performance.getMetrics` and
+`Page.captureScreenshot` all timed out at 8s, and `sample` showed the process parked in `mach_msg`
+("waiting on another thread"), which reads as idle unless you check whether JS is actually running.
+
+Breadcrumbs found it: `chat()` was instrumented to POST every step to a local probe port. One click
+produced `chat:in lang=zh -> chat:awaitZh -> chat:zhReady -> chat:in lang=zh ...` **5566 self-re-entries
+inside the same millisecond, and 0 `chat:preFetch`**. `ai.js` had
+
+```js
+if (lang === "zh" && window.__ensureZh) {
+  return window.__ensureZh().then(function () { return chat(q, history, query, lang, order); });
+}
+```
+
+and `app.js` always assigns `window.__ensureZh`, so **every Chinese AI call recursed forever**. Each
+level only queued another `.then`, so the stack never grew and no promise ever rejected: the microtask
+queue starved the main thread and `fetch` was never reached. Introduced with the lazy `data/zh.js`
+loader in v90 (v90-v94 shipped it); English and German never enter that branch, which is why only
+Chinese users hit it.
+
+Fix: the wait is now one-shot and skipped when the pack is loaded or its load failed -
+`lang === "zh" && !window.__ZH && window.__ensureZh && !zhWaited`, with `zhWaited` set before awaiting,
+so recursion is structurally impossible and a failed load falls back to the English prompt instead of
+looping.
+
+Evidence: new `tests/ai-zh-freeze.test.cjs` (5 tests - pack loaded = zero waits and one request; pack
+loading = exactly one wait; failed load = still answers; two questions = one wait; en/de never touch
+the zh loader). On the old code those five blow up with `RangeError: Map maximum size exceeded`, which
+is the infinite recursion itself. Front end suite is **101/101**. Live `build v95` and `ai.js` md5 match;
+a real account asked a Chinese question on production (answer rendered in Chinese, quota 5 -> 4) and a
+form follow-up worked too, with the page answering `Runtime.evaluate` in 6ms throughout.
+
+Lesson: any read path that awaits a lazy loader and then re-enters itself needs a one-shot gate - and
+the tests have to mock the real page. `ai-lang.test.cjs` only ever mocked `window.__ZH` and never
+`window.__ensureZh`, so it missed the one combination production always has.
