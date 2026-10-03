@@ -232,13 +232,23 @@
     return lines.join("\n");
   }
 
+  /* The Chinese question pack (data/zh.js, 280KB) is lazy-loaded, so a Chinese
+     question must wait for it once - otherwise the prompt falls back to English
+     while the model is told to answer in Chinese.
+     FIXED 2026-10-03: this wait used to re-enter chat() whenever window.__ensureZh
+     existed. app.js always assigns it, so every Chinese AI call recursed forever
+     through .then() - the stack never grew and no promise ever rejected, the
+     microtask queue starved the main thread and the page froze with no fetch sent.
+     Now we wait at most once (zhWaited); already-loaded or failed-load paths skip
+     the wait entirely, so recursion is structurally impossible. */
+  var zhWaited = false;
   function chat(q, history, query, lang, order) {
     var c = cfg();
     if (!hasLLM()) return Promise.reject({ kind: "nokey" });
-    /* 中文题面翻译是懒加载的（data/zh.js，280KB）。要用中文提问就先等它到位，
-       否则 prompt 里的题目会退回英文，而模型被要求用中文回答，质量会掉。 */
-    if (lang === "zh" && window.__ensureZh) {
-      return window.__ensureZh().then(function () { return chat(q, history, query, lang, order); });
+    if (lang === "zh" && !window.__ZH && window.__ensureZh && !zhWaited) {
+      zhWaited = true;
+      var again = function () { return chat(q, history, query, lang, order); };
+      return window.__ensureZh().then(again, again);
     }
     var msgs = [{ role: "system", content: sysPrompt(q, lang, order) }];
     (history || []).slice(-8).forEach(function (m) {
