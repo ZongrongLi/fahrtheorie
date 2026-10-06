@@ -521,6 +521,8 @@
     var goalDone = state.days[today()] || 0;
     var goalPct = Math.min(100, Math.round(goalDone / state.goal * 100));
     var contId = nextUnseen() || CAT[0].id;
+    var contQ = BY[contId] || CAT[0];
+    var contC = (contQ && contQ._th) || "ALL";
     return '' +
       '<section class="hero">' +
         '<div class="hero-main">' +
@@ -528,7 +530,7 @@
           '<h1>' + esc(t("home.greeting")) + '</h1>' +
           '<p class="lede">' + esc(t("home.lede", { n: total, img: withImg })) + '</p>' +
           '<div class="hero-cta">' +
-            '<a class="btn primary" href="#/practice?c=ALL&m=all&s=seq&at=' + encodeURIComponent(contId) + '&src=all">' + ic("right") + esc(t("home.continue")) + '</a>' +
+            '<a class="btn primary" href="#/practice?c=' + encodeURIComponent(contC) + '&m=all&s=seq&at=' + encodeURIComponent(contId) + '">' + ic("right") + esc(t("home.continue")) + '</a>' +
             '<button class="btn ghost" data-act="random">' + ic("refresh") + esc(t("home.random")) + '</button>' +
             '<a class="btn ghost" href="#/exam">' + ic("clock") + esc(t("home.exam")) + '</a>' +
             '<a class="btn ghost" href="#/wrong">' + ic("alert") + esc(t("nav.wrong")) + (wr ? ' (' + wr + ')' : '') + '</a>' +
@@ -670,6 +672,7 @@
     if (p.at) { var ix = session.ids.indexOf(p.at); if (ix >= 0) session.i = ix; }
     session.nav = p.nav || navFromHash(lastHash);
     session.back = (lastHash && lastHash.indexOf("practice") < 0) ? lastHash : "#/categories";
+    syncAt();
   }
   function sessionTitle(p) {
     if (!p.c || p.c === "ALL") return t("mode.all");
@@ -688,6 +691,30 @@
     ids = (ids || []).filter(function (id) { return !!BY[id]; });
     session = { ids: ids, i: 0, mode: opts.mode || "normal", key: opts.key || "", title: opts.title || "", from: opts.c && opts.c !== "ALL" ? "categories" : "", answers: {}, startedAt: Date.now(), seed: opts.seed || "" };
     return session;
+  }
+  /* Refresh survival: stamp current question into the URL (?at=<id>) on every
+     render, via replaceState (fires no hashchange -> route() won't rebuild the
+     session and in-memory answers survive). On reload, startFromRoute reads
+     `at` and lands back on this question. Exam mode excluded on purpose. */
+  function syncAt() {
+    try {
+      if (!session || !session.ids || session.mode === "exam") return;
+      var id = session.ids[session.i]; if (!id || !BY[id]) return;
+      var h = location.hash || "";
+      if (h.indexOf("practice") < 0) return;
+      var qi = h.indexOf("?");
+      var base = qi >= 0 ? h.slice(0, qi) : h;
+      var out = [], seen = false;
+      (qi >= 0 ? h.slice(qi + 1) : "").split("&").forEach(function (kv) {
+        if (!kv) return;
+        if (kv.split("=")[0] === "at") { if (!seen) { out.push("at=" + encodeURIComponent(id)); seen = true; } }
+        else out.push(kv);
+      });
+      if (!seen) out.push("at=" + encodeURIComponent(id));
+      var nh = base + "?" + out.join("&");
+      if (nh !== h) { try { history.replaceState(null, "", location.pathname + nh); } catch (e2) {} }
+      session.key = nh.replace(/^#\/?/, "");
+    } catch (e) {}
   }
 
   function vQuiz() {
@@ -1344,7 +1371,7 @@
     else a.sel = [i];
     rerenderQuiz();
   }
-  function rerenderQuiz() { var app = document.getElementById("view"); app.innerHTML = session.mode === "exam" ? vExam() : vQuiz(); if (session.mode !== "exam") preloadNeighbours(); mountMedia(); try { if (session.mode !== "exam" && session.ids[session.i]) discussLoad(session.ids[session.i]); } catch (e) {} }
+  function rerenderQuiz() { syncAt(); var app = document.getElementById("view"); app.innerHTML = session.mode === "exam" ? vExam() : vQuiz(); if (session.mode !== "exam") preloadNeighbours(); mountMedia(); try { if (session.mode !== "exam" && session.ids[session.i]) discussLoad(session.ids[session.i]); } catch (e) {} }
 
   /* ---------------- exam ---------------- */
   function vExamHome() {
@@ -1458,7 +1485,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v95 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v96 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {
