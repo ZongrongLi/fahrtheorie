@@ -244,6 +244,7 @@ html[dir="rtl"] .bubble.md,html[dir="rtl"] .md{text-align:right;}
 .opt-body{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0;}
 .opt-body .ln{display:block;}
 .opt-body .ln.primary{font-weight:600;}
+.opt-img{display:block;max-width:220px;max-height:140px;width:auto;height:auto;border-radius:8px;}
 .opt-body .ln+.ln{font-size:13.5px;color:var(--muted);}
 .opt-body .de{font-weight:600;}
 .opt-body .de+.en{font-size:13.5px;color:var(--muted);}

@@ -390,6 +390,21 @@
     }
     return out || '<span class="ln primary">—</span>';
   }
+  /* Picture options (e.g. road-sign questions 1.4.40-013): the catalogue ships
+     empty option text because each option IS an image. q.oimg[i] names the local
+     stem (assets/img/<stem>.webp); indexed by canonical option so the display
+     shuffle in qOrder() cannot mismatch image and answer. */
+  function optHasText(q, i) {
+    var langs = contentLangs(), k;
+    for (k = 0; k < langs.length; k++) { if (langText(q, langs[k], "o", i)) return true; }
+    return false;
+  }
+  function optBody(q, i) {
+    if (!optHasText(q, i) && q.oimg && q.oimg[i]) {
+      return '<img class="opt-img" src="' + imgSrcOf(q.oimg[i]) + '" alt="' + esc(t("quiz.imgAlt")) + '" loading="lazy" decoding="async">';
+    }
+    return stackText(q, "o", i);
+  }
   function trName(de, en, zh) {
     var l = contentLangs(), parts = [];
     if (l.indexOf("zh") >= 0 && zh) parts.push(zh);
@@ -743,7 +758,7 @@
      them from the local DB and serves them as in-memory blob: URLs -> figures appear instantly. */
   var IMGKEY = "dtt.imgcache.v2";
   var imgURL = {}, imgWarming = false, imgStat = { total: 0, have: 0 };
-  function allImgIds() { return CAT.filter(function (q) { return q.img; }).map(function (q) { return q.img; }); }
+  function allImgIds() { var ids = CAT.filter(function (q) { return q.img; }).map(function (q) { return q.img; }); CAT.forEach(function (q) { (q.oimg || []).forEach(function (s) { if (ids.indexOf(s) < 0) ids.push(s); }); }); return ids; }
   function imgDB() {
     return new Promise(function (res, rej) {
       var r = indexedDB.open("dtt-img", 1);
@@ -992,7 +1007,7 @@
         if (a.submitted) { if (q.ans.indexOf(i) >= 0) cls += " right"; else if (on) cls += " bad"; }
         return '<li class="' + cls + '" data-act="opt" data-i="' + i + '" role="button" tabindex="0" aria-pressed="' + on + '">' +
           '<span class="box" aria-hidden="true">' + (q.t === "multi" ? ic("check") : "") + '</span>' +
-          '<span class="opt-body">' + stackText(q, "o", i) + '</span>' +
+          '<span class="opt-body">' + optBody(q, i) + '</span>' +
           '<span class="badge-k">' + L(p) + '</span></li>';
       }).join("") + '</ul>';
     }
@@ -1393,7 +1408,7 @@
       : '<ul class="opts' + (q.t === "multi" ? " multi" : "") + '">' + qOrder(q).map(function (i, p) {
           var on = a.sel.indexOf(i) >= 0;
           return '<li class="opt' + (on ? " on" : "") + '" data-act="opt" data-i="' + i + '" role="button" tabindex="0" aria-pressed="' + on + '">' +
-            '<span class="box">' + (q.t === "multi" ? ic("check") : "") + '</span><span class="opt-body">' + stackText(q, "o", i) + '</span><span class="badge-k">' + L(p) + '</span></li>';
+            '<span class="box">' + (q.t === "multi" ? ic("check") : "") + '</span><span class="opt-body">' + optBody(q, i) + '</span><span class="badge-k">' + L(p) + '</span></li>';
         }).join("") + '</ul>';
     return '<section class="quiz exam"><header class="quiz-top">' +
       '<button class="iconbtn" data-act="exam-abort" title="' + esc(t("exam.abort")) + '">' + ic("x") + '</button>' +
@@ -1485,7 +1500,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v96 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v97 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   function vAdmin() {

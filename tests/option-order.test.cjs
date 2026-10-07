@@ -171,3 +171,19 @@ test('the AI prompt uses the displayed letters, not the catalogue letters', () =
   assert.match(local, /- \*\*B\.\*\* A correct/, 'option line B must show the second displayed option');
   assert.match(local, /Correct answer: \*\*B, C\*\*/, 'the answer letters must follow the displayed order');
 });
+
+test('picture-option questions carry local option images', () => {
+  const path = require('node:path');
+  const { context, questions } = loadApp();
+  const pic = questions.filter((q) => (q.od || []).length && q.od.every((o) => !o.trim()) && q.ans.length);
+  assert.ok(pic.length > 0, 'expected picture-option questions in the catalogue');
+  for (const q of pic) {
+    assert.ok(q.oimg && q.oimg.length === q.od.length, q.id + ': oimg must cover every option');
+    q.oimg.forEach((stem, i) => {
+      assert.ok(fs.existsSync(path.join(__dirname, '..', 'assets', 'img', stem + '.webp')), q.id + ': missing ' + stem + '.webp');
+    });
+    const ord = context.window.testQOrder(q);
+    assert.equal(ord.length, q.od.length, q.id + ': shuffle covers all options');
+  }
+  assert.ok(appSource.includes('optBody(q, i)'), 'option renderer must use optBody');
+});
