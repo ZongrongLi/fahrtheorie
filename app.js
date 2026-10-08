@@ -1500,9 +1500,79 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v97 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v98 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
+  /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
+     后端接口：POST /api/admin/login {password} → token；GET /api/admin/users（头 x-admin-token）；
+     POST /api/admin/user {name, left?, unlimited?}。token 只放 sessionStorage，关标签页即清。 */
+  var admToken = "", admUsers = [], admStats = null, admMsg = "", admQ = "", admFresh = false;
+  try { admToken = sessionStorage.getItem("dtt.adm") || ""; } catch (e) {}
+  function admSetToken(t) { admToken = t || ""; try { t ? sessionStorage.setItem("dtt.adm", t) : sessionStorage.removeItem("dtt.adm"); } catch (e2) {} }
+  function admApi(path, opts) {
+    opts = opts || {};
+    var h = { "content-type": "application/json" };
+    if (admToken) h["x-admin-token"] = admToken;
+    return fetch(apiRoot() + path, { method: opts.method || "GET", headers: h, body: opts.body ? JSON.stringify(opts.body) : undefined })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { s: r.status, j: j }; }); });
+  }
+  function admWhen(ms) { if (!ms) return "-"; var d = new Date(ms); function p(n) { return (n < 10 ? "0" : "") + n; } return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes()); }
+  function admRow(u) {
+    var tag = u.unlimited ? '<span class="tag paid">已付费</span>' : '<span class="tag free">免费</span>';
+    return '<tr><td>' + esc(u.email || u.name) + (u.google ? ' <span class="tag">Google</span>' : '') + '</td>' +
+      '<td><b>' + (u.left || 0) + '</b></td><td>' + tag + '</td>' +
+      '<td class="mono">' + esc(admWhen(u.created)) + '</td>' +
+      '<td class="mono">' + esc(u.uid) + '</td>' +
+      '<td><button class="btn ghost small" data-act="adm-add" data-name="' + esc(u.name) + '">+10</button> ' +
+      '<button class="btn ghost small" data-act="adm-zero" data-name="' + esc(u.name) + '">归零</button> ' +
+      '<button class="btn ghost small" data-act="adm-set" data-name="' + esc(u.name) + '">设次数</button> ' +
+      '<button class="btn ghost small" data-act="adm-paid" data-name="' + esc(u.name) + '">' + (u.unlimited ? "取消付费" : "标记付费") + '</button></td></tr>';
+  }
+  function admFiltered() {
+    if (!admQ) return admUsers;
+    return admUsers.filter(function (u) { return ((u.name || "") + " " + (u.email || "") + " " + (u.uid || "")).toLowerCase().indexOf(admQ) >= 0; });
+  }
+  function admPaintRows() {
+    var tb = document.querySelector('[data-role="adm-rows"]'); if (!tb) return;
+    var rows = admFiltered().map(admRow).join("");
+    tb.innerHTML = rows || '<tr><td colspan="6" class="muted">暂无用户</td></tr>';
+  }
+  function rerenderAdmin() { try { if ((location.hash || "").indexOf("admin") >= 0) document.getElementById("view").innerHTML = vAdmin(); } catch (e) {} }
+  function admLoad(msg) {
+    admApi("/api/admin/users").then(function (o) {
+      if (o.s === 401) { admSetToken(""); admMsg = "登录过期，请重新输入密码"; rerenderAdmin(); return; }
+      if (o.s !== 200) { admMsg = "加载失败：" + ((o.j && o.j.error) || o.s); rerenderAdmin(); return; }
+      admUsers = o.j.users || []; admStats = o.j.stats || null; admMsg = msg || "";
+      rerenderAdmin();
+    }).catch(function (e) { admMsg = "网络错误：" + e; rerenderAdmin(); });
+  }
+  function admPatch(name, body, okMsg) {
+    body.name = name;
+    admApi("/api/admin/user", { method: "POST", body: body }).then(function (o) {
+      if (o.s === 401) { admSetToken(""); admMsg = "登录过期，请重新输入密码"; rerenderAdmin(); return; }
+      if (o.s !== 200) { admMsg = "操作失败：" + ((o.j && o.j.error) || o.s); rerenderAdmin(); return; }
+      admLoad(okMsg);
+    }).catch(function (e) { admMsg = "网络错误：" + e; rerenderAdmin(); });
+  }
+  function admCard() {
+    if (!admToken) {
+      return card("用户管理",
+        '<p class="muted">查看注册用户、剩余额度、付费状态。密码只存本站浏览器 sessionStorage，关标签页即清。</p>' +
+        '<div class="q-actions"><input type="password" data-role="adm-pw" placeholder="后台密码" autocomplete="current-password" style="flex:1;min-width:180px">' +
+        '<button class="btn primary small" data-act="adm-login">进入</button></div>' +
+        (admMsg ? '<p class="muted">' + esc(admMsg) + '</p>' : ""));
+    }
+    if (!admFresh) { admFresh = true; setTimeout(function () { admLoad(""); }, 0); }
+    var s = admStats || {};
+    return card("用户管理",
+      '<div class="q-actions"><span class="muted">共 ' + (s.total || 0) + ' 人 · 已付费 ' + (s.paid || 0) + ' · 免费剩余合计 ' + (s.leftSum || 0) + '</span>' +
+      '<button class="btn ghost small" data-act="adm-reload">刷新</button>' +
+      '<button class="btn ghost small danger" data-act="adm-logout">退出</button></div>' +
+      '<div class="q-actions" style="margin-top:10px"><input type="text" data-role="adm-q" placeholder="搜索 邮箱 / 用户名 / uid" value="' + esc(admQ) + '" style="flex:1;min-width:200px"></div>' +
+      (admMsg ? '<p class="muted">' + esc(admMsg) + '</p>' : "") +
+      '<div class="table-wrap"><table class="adm-table"><thead><tr><th>用户</th><th>剩余</th><th>付费</th><th>注册</th><th>uid</th><th>操作</th></tr></thead>' +
+      '<tbody data-role="adm-rows">' + (admFiltered().map(admRow).join("") || '<tr><td colspan="6" class="muted">暂无用户</td></tr>') + '</tbody></table></div>');
+  }
   function vAdmin() {
     var ai = window.AI.cfg();
     return '<section class="page-h"><span class="eyebrow">' + ic("cog") + esc(t("admin.title")) + '</span><h1>' + esc(t("admin.title")) + '</h1><p class="lede">' + esc(t("admin.hint")) + '</p></section>' +
@@ -1538,6 +1608,7 @@
         field(t("admin.apiBase"), "sp-api", prefs.apiBase || "", "https://dtt-backend.<you>.workers.dev") +
         field(t("admin.googleId"), "sp-gid", prefs.googleClientId || "", "xxxxxxxx.apps.googleusercontent.com") +
         '<div class="q-actions"><button class="btn ghost small" data-act="sp-save">' + esc(t("common.saved")) + '</button></div>') +
+      admCard() +
       '<div class="q-actions"><a class="btn ghost small" href="#/settings">' + esc(t("admin.back")) + '</a></div>';
   }
   function showSupport() {
@@ -2073,6 +2144,13 @@
     if (act === "support") { showSupport(); return; }
     if (act === "close-modal") { if (el.classList.contains("modal-mask") && e.target !== el) return; window.__pendingPay = false; closeModal(); return; }
     if (act === "sp-save") { prefs.donateLink = val("sp-link"); prefs.buyUrl = val("sp-buy"); if (document.querySelector('[data-role="sp-api"]')) prefs.apiBase = val("sp-api"); if (document.querySelector('[data-role="sp-gid"]')) prefs.googleClientId = val("sp-gid"); savePrefs(); document.getElementById("view").innerHTML = vSettings(); toast(t("common.saved")); return; }
+    if (act === "adm-login") { var pwEl = document.querySelector('[data-role="adm-pw"]'); var pw = pwEl ? pwEl.value : ""; if (!pw) return; admApi("/api/admin/login", { method: "POST", body: { password: pw } }).then(function (o) { if (o.s !== 200) { admMsg = "密码不正确"; rerenderAdmin(); return; } admSetToken(o.j.token); admMsg = ""; admFresh = true; admLoad(""); }).catch(function (e) { admMsg = "网络错误：" + e; rerenderAdmin(); }); return; }
+    if (act === "adm-logout") { admSetToken(""); admUsers = []; admStats = null; admMsg = ""; admQ = ""; admFresh = false; rerenderAdmin(); return; }
+    if (act === "adm-reload") { admLoad("已刷新"); return; }
+    if (act === "adm-add") { var an = el.getAttribute("data-name"); var au = admUsers.filter(function (x) { return x.name === an; })[0]; admPatch(an, { left: ((au && au.left) || 0) + 10 }, "已加 10 次"); return; }
+    if (act === "adm-zero") { if (!confirm("把该用户剩余额度归零？")) return; admPatch(el.getAttribute("data-name"), { left: 0 }, "已归零"); return; }
+    if (act === "adm-set") { var sn = el.getAttribute("data-name"); var sv = window.prompt("把 " + sn + " 的剩余次数设为：", "10"); if (sv === null) return; admPatch(sn, { left: parseInt(sv, 10) }, "次数已更新"); return; }
+    if (act === "adm-paid") { var pn = el.getAttribute("data-name"); var pu = admUsers.filter(function (x) { return x.name === pn; })[0]; admPatch(pn, { unlimited: !(pu && pu.unlimited) }, (pu && pu.unlimited) ? "已取消付费" : "已标记付费"); return; }
     if (act === "sp-clear") { prefs.donateQR = ""; savePrefs(); document.getElementById("view").innerHTML = vSettings(); return; }
     if (act === "lic-enable") {
       prefs.donateLink = val("sp-link"); prefs.buyUrl = val("sp-buy"); prefs.lic = val("sp-lic"); prefs.licBase = val("sp-licbase"); savePrefs();
@@ -2091,6 +2169,7 @@
 
   document.addEventListener("input", function (e) {
     if (e.target.matches('[data-role="numinput"]')) { var q = currentQ(); if (q && session.answers[q.id]) session.answers[q.id].val = e.target.value; }
+    if (e.target.matches('[data-role="adm-q"]')) { admQ = (e.target.value || "").trim().toLowerCase(); admPaintRows(); }
   });
   document.addEventListener("submit", function (e) {
     if (e.target.matches('[data-role="aiform"]')) { e.preventDefault(); if (!aiGate()) return; var inp = e.target.querySelector('[data-role="aiinput"]'); var txt = inp.value.trim(); if (!txt) return; inp.value = ""; aiAsk(currentQ(), txt); }
@@ -2123,7 +2202,7 @@
     if (e.target.matches('[data-role="aipanel"]')) { var q = currentQ(); if (q) aiPanelOpen[q.id] = e.target.open; }
   }, true);
   document.addEventListener("keydown", function (e) {
-    if (e.target.matches("input,textarea")) { if (e.key === "Enter" && e.target.matches('[data-role="aiinput"]')) return; return; }
+    if (e.target.matches("input,textarea")) { if (e.key === "Enter" && e.target.matches('[data-role="adm-pw"]')) { var lb = document.querySelector('[data-act="adm-login"]'); if (lb) lb.click(); } if (e.key === "Enter" && e.target.matches('[data-role="aiinput"]')) return; return; }
     if (!session || location.hash.indexOf("practice") < 0) return;
     var q = BY[session.ids[session.i]]; var a = session.answers[q.id]; if (!q || !a) return;
     if (/^[1-9]$/.test(e.key)) { var i = parseInt(e.key, 10) - 1; if (i < q.oe.length) onOpt(i); }

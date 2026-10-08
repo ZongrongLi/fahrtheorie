@@ -245,6 +245,14 @@ html[dir="rtl"] .bubble.md,html[dir="rtl"] .md{text-align:right;}
 .opt-body .ln{display:block;}
 .opt-body .ln.primary{font-weight:600;}
 .opt-img{display:block;max-width:220px;max-height:140px;width:auto;height:auto;border-radius:8px;}
+.table-wrap{overflow-x:auto;margin-top:10px;}
+.adm-table{width:100%;border-collapse:collapse;font-size:13px;}
+.adm-table th,.adm-table td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap;}
+.adm-table th{color:var(--muted);font-weight:600;font-size:12px;}
+.tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;border:1px solid var(--line);color:var(--muted);}
+.tag.paid{color:var(--ok);border-color:var(--ok);}
+.tag.free{color:var(--warn);border-color:var(--warn);}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:var(--muted);}
 .opt-body .ln+.ln{font-size:13.5px;color:var(--muted);}
 .opt-body .de{font-weight:600;}
 .opt-body .de+.en{font-size:13.5px;color:var(--muted);}

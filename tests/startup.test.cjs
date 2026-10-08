@@ -595,3 +595,12 @@ test('home continue resumes inside the question category, not ALL', () => {
   assert.equal(appSource.includes('encodeURIComponent(contId) + "&src=all"'), false,
     'continue must no longer jump into the global list');
 });
+
+test('admin view embeds user management against the worker API', () => {
+  assert.ok(appSource.includes('function admCard()'), 'admin must render a user-management card');
+  assert.ok(appSource.includes('"/api/admin/users"'), 'admin must list users from the worker');
+  assert.ok(appSource.includes('"/api/admin/login"'), 'admin must log in against the worker');
+  assert.ok(appSource.includes('x-admin-token'), 'admin requests must carry the admin token header');
+  assert.ok(appSource.includes('data-act="adm-login"'), 'admin login button must exist');
+  assert.ok(appSource.includes('data-act="adm-paid"'), 'admin must toggle paid status per user');
+});
