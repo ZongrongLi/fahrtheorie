@@ -52,7 +52,8 @@
   /* ---------------- state ---------------- */
   var CAT = null, CAT_ALL = null, BY = {}, INDEX = null;
   function isClassB(q) {
-    var m = /^([0-9.]+)-(\d+)/.exec(q.id);
+    if (window.__NOTB) return !window.__NOTB[q.id];   // official license audit, see work/resplit-catalog.mjs
+    var m = /^([0-9.]+)-(\d+)/.exec(q.id);   // fallback: id heuristic (kept for tests that skip scope.js)
     if (!m) return true;
     return m[1].charAt(0) === "1" || m[2].charAt(0) === "1";   // Teil 1 (all classes) or Zusatzstoff 1xx = Klasse B
   }
@@ -86,13 +87,14 @@
      纯本地加速不同步；非 B 照题号不上云（只留本机）。写侧 8 秒防抖 +
      切后台即时刷，后端还有 5 秒限流兜底。 */
   function progIsB(id) {   // 与 isClassB 同口径；格式对不上的未知题号按同步处理
+    if (window.__NOTB) return !window.__NOTB[String(id || "")];
     var m = /^([0-9.]+)-(\d+)/.exec(String(id || ""));
     if (!m) return true;
     return m[1].charAt(0) === "1" || m[2].charAt(0) === "1";
   }
   var progTimer = null, progWipe = false, progPushedSig = "", progSavedAt = 0;
   function progLogged() { return !!(typeof apiRoot === "function" && apiRoot() && prefs.token); }
-  var PROG_NOTE_BUDGET = 1024;   // 每人笔记总上限 1KB（UTF-8 字节），与后端同一规则
+  var PROG_NOTE_BUDGET = 16384;   // 每人笔记总上限 16KB（UTF-8 字节），与后端同一规则
   function progUtf8(s) { try { return new TextEncoder().encode(String(s)).length; } catch (e) { return String(s).length; } }
   function progUtf8cut(s, n) {
     s = String(s);
@@ -101,16 +103,21 @@
     catch (e) { return s.slice(0, n); }
   }
   function progFitNotes(notes) {   // 按 at 从新到旧装，旧的被顶掉；最新一条超标也留（截断）
-    var ks = Object.keys(notes || {}).sort(function (a, b) { return ((notes[b] && notes[b].at | 0) - (notes[a] && notes[a].at | 0)); });
+    var ks = Object.keys(notes || {}).sort(function (a, b) { return ((notes[b] && Number(notes[b].at) || 0) - (notes[a] && Number(notes[a].at) || 0)); });
     var out = {}, used = 0, i, k, e, tx;
     for (i = 0; i < ks.length; i++) {
       k = ks[i]; e = notes[k]; if (!e || !e.text) continue;
       tx = String(e.text);
-      if (used + progUtf8(tx) <= PROG_NOTE_BUDGET) { out[k] = { text: tx, at: e.at | 0 }; used += progUtf8(tx); continue; }
-      if (used === 0) out[k] = { text: progUtf8cut(tx, PROG_NOTE_BUDGET), at: e.at | 0 };
+      if (used + progUtf8(tx) <= PROG_NOTE_BUDGET) { out[k] = { text: tx, at: Number(e.at) || 0 }; used += progUtf8(tx); continue; }
+      if (used === 0) out[k] = { text: progUtf8cut(tx, PROG_NOTE_BUDGET), at: Number(e.at) || 0 };
       break;
     }
     return out;
+  }
+  function progNoteBytes(notes) {
+    var n = 0, k;
+    for (k in (notes || {})) if (notes[k] && notes[k].text) n += progUtf8(notes[k].text);
+    return n;
   }
   function progSerialize() {
     var q = {}, notes = {}, days = {}, k, e;
@@ -123,16 +130,16 @@
         if (e.bm) q[k].bm = true; } }
     for (k in state.notes) { e = state.notes[k];
       if (!progIsB(k)) continue;   // 非 B 照不上云
-      if (e && e.text) notes[k] = { text: String(e.text).slice(0, 2000), at: e.at | 0 }; }
+      if (e && e.text) notes[k] = { text: String(e.text).slice(0, PROG_NOTE_BUDGET), at: Number(e.at) || 0 }; }
     for (k in state.days) { if ((state.days[k] | 0) > 0) days[k] = state.days[k] | 0; }
     return { q: q, notes: progFitNotes(notes), days: days, goal: state.goal | 0 || 20 };
   }
   function progMerge(srv) {
     var k, o, c;
     for (k in (srv.q || {})) { o = state.q[k]; c = srv.q[k]; if (!c || !progIsB(k)) continue;
-      if (!o || ((c.at | 0) >= (o.at | 0))) { state.q[k] = { a: c.a | 0, w: c.w | 0, r: c.r | 0, last: !!c.last, wrong: !!c.wrong, at: c.at | 0 }; if (c.bm) state.q[k].bm = true; } }
+      if (!o || ((Number(c.at) || 0) >= (Number(o.at) || 0))) { state.q[k] = { a: c.a | 0, w: c.w | 0, r: c.r | 0, last: !!c.last, wrong: !!c.wrong, at: Number(c.at) || 0 }; if (c.bm) state.q[k].bm = true; } }
     for (k in (srv.notes || {})) { o = state.notes[k]; c = srv.notes[k]; if (!c || !progIsB(k)) continue;
-      if (!o || ((c.at | 0) >= (o.at | 0))) state.notes[k] = { text: String(c.text || "").slice(0, 2000), at: c.at | 0 }; }
+      if (!o || ((Number(c.at) || 0) >= (Number(o.at) || 0))) state.notes[k] = { text: String(c.text || "").slice(0, PROG_NOTE_BUDGET), at: Number(c.at) || 0 }; }
     for (k in (srv.days || {})) state.days[k] = Math.max(state.days[k] | 0, (srv.days[k] | 0));
     state.notes = progFitNotes(state.notes);
     if ((srv.savedAt | 0) >= progSavedAt) { state.goal = srv.goal | 0 || state.goal; progSavedAt = srv.savedAt | 0; }
@@ -306,10 +313,9 @@
   }
   window.__ensureZh = ensureZh;
   function needZh() { if (zhWanted()) ensureZh().then(function (ok) { if (ok) refresh(); }); }
-  /* data/questions.js 只带 B 照那 1262 题 —— 首屏从 720KB 砍到 409KB（gzip），
-     英文/德语用户最常走的路径不再为卡车/公交题付流量。剩下 1145 题在
+  /* data/questions.js 只带 B 照那 1236 题 —— 首屏不用为卡车/公交题付流量。剩下 1171 题在
      data/questions-more.js，只有把「车型范围」切到「全部车型」时才拉回来，
-     并进 CAT_ALL / BY 后重渲染一次。 */
+     并进 CAT_ALL / BY 后重渲染一次。B 口径见 work/resplit-catalog.mjs（官方 license 审计）。 */
   var allQLoad = null;
   function catalogTotal() { return window.__CATALOG_ALL_COUNT || (CAT_ALL ? CAT_ALL.length : 0); }
   function ensureAllQ() {
@@ -1255,11 +1261,12 @@
     }, 350);
   }
   function noteBlock(id, note) {
+    var budget = t("quiz.noteBudget", { used: progNoteBytes(state.notes), max: PROG_NOTE_BUDGET });
     return '<details class="panel" data-role="notepanel"' + (note ? " open" : "") + '>' +
       '<summary>' + ic("note") + esc(t("quiz.notes")) + '<span class="muted" data-role="notetag">' + (note ? esc(t("common.saved")) : esc(t("quiz.noNote"))) + '</span></summary>' +
       '<textarea data-role="noteta" rows="3" placeholder="' + esc(t("quiz.addNote")) + '">' + esc(note) + '</textarea>' +
       '<div class="panel-actions"><button class="btn small primary" data-act="savenote">' + esc(t("quiz.save")) + '</button></div>' +
-      '<p class="muted fineprint">' + esc(t("quiz.noteBudget")) + '</p>' +
+      '<p class="muted fineprint" data-role="noteused">' + esc(budget) + '</p>' +
       '</details>';
   }
 
@@ -1470,7 +1477,7 @@
     var ids = Object.keys(state.notes).filter(function (id) { return state.notes[id] && state.notes[id].text && BY[id]; });
     var head = '<section class="page-h"><span class="eyebrow">' + ic("note") + esc(t("notes.title")) + '</span><h1>' + esc(t("notes.title")) + '</h1><p class="lede">' + esc(t("notes.sub")) + '</p></section>';
     if (!ids.length) return head + '<div class="empty card"><h2>' + esc(t("notes.empty")) + '</h2><a class="btn primary" href="#/categories">' + esc(t("notes.emptyAction")) + '</a></div>';
-    return head + '<div class="muted note-count">' + esc(t("notes.count", { n: ids.length })) + '</div><div class="note-list">' + ids.map(function (id) {
+    return head + '<div class="muted note-count">' + esc(t("notes.count", { n: ids.length })) + ' · ' + esc(t("quiz.noteBudget", { used: progNoteBytes(state.notes), max: PROG_NOTE_BUDGET })) + '</div><div class="note-list">' + ids.map(function (id) {
       var q = BY[id];
       return '<article class="note-row"><header><span class="qid">' + esc(q.id) + '</span><span class="wr-meta">' + esc(thName(q)) + '</span><a class="btn small ghost" href="#/practice?c=ALL&m=all&s=seq&at=' + encodeURIComponent(id) + '&src=all">' + esc(t("notes.jump")) + '</a></header>' +
         '<p class="note-q">' + esc(q.qe) + '</p><div class="note-body">' + esc(state.notes[id].text) + '</div></article>';
@@ -1500,7 +1507,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v98 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v99 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2092,7 +2099,21 @@
     if (act === "dis-reply-open") { var dqo = el.getAttribute("data-qid"), deo = discussGet(dqo); deo.replyTo = (deo.replyTo === el.getAttribute("data-id")) ? null : el.getAttribute("data-id"); discussPaint(dqo); return; }
     if (act === "dis-reply-send") return discussPost(el.getAttribute("data-qid"), el.getAttribute("data-id"), "disrta");
     if (act === "dis-reply-cancel") { var dqc = el.getAttribute("data-qid"); discussGet(dqc).replyTo = null; discussPaint(dqc); return; }
-    if (act === "savenote") { var qq = currentQ(); var ta = document.querySelector('[data-role="noteta"]'); var txt = ta ? ta.value.trim() : ""; if (txt) state.notes[qq.id] = { text: txt, at: Date.now() }; else delete state.notes[qq.id]; var _bn = Object.keys(state.notes).length; state.notes = progFitNotes(state.notes); var _kept = state.notes[qq.id]; if (_kept && ta && txt !== _kept.text) ta.value = _kept.text; saveState(); toast(_kept && Object.keys(state.notes).length < _bn ? t("quiz.noteBudget") : t("common.saved")); var tg = document.querySelector('[data-role="notetag"]'); if (tg) tg.textContent = _kept ? t("common.saved") : t("quiz.noNote"); return; }
+    if (act === "savenote") {
+      var qq = currentQ(), ta = document.querySelector('[data-role="noteta"]');
+      var txt = ta ? ta.value.trim() : "", before = Object.keys(state.notes).length;
+      if (txt) state.notes[qq.id] = { text: txt, at: Date.now() }; else delete state.notes[qq.id];
+      state.notes = progFitNotes(state.notes);
+      var kept = state.notes[qq.id], dropped = Math.max(0, before - Object.keys(state.notes).length);
+      if (kept && ta && txt !== kept.text) ta.value = kept.text;
+      saveState();
+      toast(dropped ? t("quiz.noteDropped", { n: dropped, used: progNoteBytes(state.notes), max: PROG_NOTE_BUDGET }) : t("common.saved"));
+      var tag = document.querySelector('[data-role="notetag"]');
+      if (tag) tag.textContent = kept ? t("common.saved") : t("quiz.noNote");
+      var usedEl = document.querySelector('[data-role="noteused"]');
+      if (usedEl) usedEl.textContent = t("quiz.noteBudget", { used: progNoteBytes(state.notes), max: PROG_NOTE_BUDGET });
+      return;
+    }
     if (act === "reveal-ai") { var pnl = document.querySelector('[data-role="aipanel"]'); if (pnl) { pnl.open = true; var inq = pnl.querySelector('[data-role="aiinput"]'); if (inq) inq.focus(); } return; }
     if (act === "quick") { if (!aiGate()) return; return aiAsk(currentQ(), quickText(parseInt(el.getAttribute("data-q"), 10))); }
     if (act === "ai-gen") { if (!aiGate()) return; aiGenerate(currentQ()); return; }

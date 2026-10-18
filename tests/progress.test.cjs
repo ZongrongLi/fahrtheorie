@@ -139,7 +139,7 @@ test('serialize prunes untouched entries so uploads stay small', () => {
   assert.equal(p.q.e1.a, 2);
   assert.equal(p.q.e2.wrong, true, 'wrong-only entries survive');
   assert.equal(p.q.e3.bm, true, 'bookmark-only entries survive');
-  assert.ok(p.notes.n.text.length <= 2000, 'notes are capped');
+  assert.ok(p.notes.n.text.length <= 16384, 'notes are capped');
   assert.equal(JSON.stringify(p).includes('nope'), false, 'translation/AI caches never leave the device');
 });
 
@@ -217,15 +217,25 @@ test('non-B questions never leave the device', async () => {
   assert.equal(st.notes['2.2.03-001'].text, 'non-b note', 'cloud non-B note must not come down');
 });
 
-test('notes are capped at 1KB per person, newest wins', () => {
+test('notes are capped at 16KB per person, newest wins', () => {
   const P = load({ prefs: signedIn });
   P.context.window.testProg.setState({
-    q: {}, notes: { '1.1.01-001': { text: 'x'.repeat(600), at: 1000 },
-      '1.1.01-002': { text: 'y'.repeat(600), at: 2000 } }, tr: {}, ai: {}, days: {}, goal: 20 });
+    q: {}, notes: { '1.1.01-001': { text: 'x'.repeat(9000), at: 1000 },
+      '1.1.01-002': { text: 'y'.repeat(17000), at: 2000 } }, tr: {}, ai: {}, days: {}, goal: 20 });
   const p = P.context.window.testProg.serialize();
-  assert.equal(Object.keys(p.notes).length, 1, 'only the newest note fits in 1KB');
-  assert.equal(p.notes['1.1.01-002'].text, 'y'.repeat(600), 'newest note survives');
-  assert.equal(new TextEncoder().encode(JSON.stringify(p.notes)).length <= 1024, true, 'total stays within budget');
+  assert.equal(Object.keys(p.notes).length, 1, 'only the newest note fits in 16KB');
+  assert.equal(p.notes['1.1.01-002'].text, 'y'.repeat(16384), 'newest note survives');
+  assert.equal(new TextEncoder().encode(Object.values(p.notes).map(n => n.text).join('')).length <= 16384, true, 'total stays within budget');
+});
+
+test('note ordering keeps millisecond timestamps instead of truncating to 1970', () => {
+  const P = load({ prefs: signedIn });
+  const recent = Date.now();
+  P.context.window.testProg.setState({
+    q: {}, notes: { '1.1.01-001': { text: 'older', at: recent - 1000 },
+      '1.1.01-002': { text: 'newer', at: recent } }, tr: {}, ai: {}, days: {}, goal: 20 });
+  const p = P.context.window.testProg.serialize();
+  assert.equal(p.notes['1.1.01-002'].at, recent, 'milliseconds survive serialization');
 });
 
 test('login and progress hooks are wired in the app source', () => {
