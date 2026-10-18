@@ -313,7 +313,7 @@
   }
   window.__ensureZh = ensureZh;
   function needZh() { if (zhWanted()) ensureZh().then(function (ok) { if (ok) refresh(); }); }
-  /* data/questions.js 只带 B 照那 1236 题 —— 首屏不用为卡车/公交题付流量。剩下 1171 题在
+  /* data/questions.js 只带 B 照那 1239 题 —— 首屏不用为卡车/公交题付流量。剩下 1171 题在
      data/questions-more.js，只有把「车型范围」切到「全部车型」时才拉回来，
      并进 CAT_ALL / BY 后重渲染一次。B 口径见 work/resplit-catalog.mjs（官方 license 审计）。 */
   var allQLoad = null;
@@ -1507,7 +1507,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v99 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v100 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------

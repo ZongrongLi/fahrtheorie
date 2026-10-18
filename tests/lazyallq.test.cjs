@@ -1,4 +1,4 @@
-// Regression: data/questions.js ships Class B only (1236 = 1262 heuristic minus 26
+// Regression: data/questions.js ships Class B only (1239 = 1265 heuristic minus 26
 // proven non-B, see data/scope.js); the other 1171 questions live in
 // data/questions-more.js and are fetched only when the scope switch says "all".
 const assert = require('node:assert/strict');
@@ -73,9 +73,9 @@ test('the two shipped catalogs add up, with no id in both', () => {
   vm.runInNewContext(fs.readFileSync(require.resolve('../data/questions-more.js'), 'utf8'), mctx);
   const b = bctx.window.__CATALOG, more = mctx.window.__CATALOG_MORE;
   assert.ok(Array.isArray(b) && Array.isArray(more), 'both files must define their array');
-  assert.equal(b.length, 1236, 'Class B count');
+  assert.equal(b.length, 1239, 'Class B count');
   assert.equal(more.length, 1171, 'other classes count');
-  assert.equal(bctx.window.__CATALOG_ALL_COUNT, 2407, 'declared total');
+  assert.equal(bctx.window.__CATALOG_ALL_COUNT, 2410, 'declared total');
   assert.equal(b.length + more.length, bctx.window.__CATALOG_ALL_COUNT, 'parts must add up to the total');
   const seen = new Set(b.map((q) => q.id));
   for (const q of more) assert.ok(!seen.has(q.id), 'id appears in both files: ' + q.id);
@@ -84,7 +84,7 @@ test('the two shipped catalogs add up, with no id in both', () => {
 test('scope "b" boots without fetching the rest', () => {
   const { context, scripts } = load({ scope: 'b' });
   context.window.__CATALOG = B;
-  context.window.__CATALOG_ALL_COUNT = 2407;
+  context.window.__CATALOG_ALL_COUNT = 2410;
   context.window.__boot();
   assert.ok(!scripts.some((s) => String(s.src).includes('questions-more')),
     'B learners must not download the other 1171 questions');
@@ -94,7 +94,7 @@ test('scope "b" boots without fetching the rest', () => {
 test('scope "all" boots and pulls the rest, then merges it into CAT_ALL', async () => {
   const { context, scripts } = load({ scope: 'all' });
   context.window.__CATALOG = B;
-  context.window.__CATALOG_ALL_COUNT = 2407;
+  context.window.__CATALOG_ALL_COUNT = 2410;
   context.window.__boot();
   const tag = scripts.find((s) => String(s.src).includes('questions-more'));
   assert.ok(tag, 'switching to all classes must fetch data/questions-more.js');
