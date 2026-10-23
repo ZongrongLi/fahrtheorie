@@ -92,7 +92,10 @@
     if (!m) return true;
     return m[1].charAt(0) === "1" || m[2].charAt(0) === "1";
   }
-  var progTimer = null, progWipe = false, progPushedSig = "", progSavedAt = 0;
+  var progTimer = null, progRetryTimer = null, progRetryN = 0, progInFlight = false, progQueued = false;
+  var progWipe = false, progPushedSig = "", progAcked = null, progSavedAt = 0;
+  var progSync = { state: "idle", at: 0, retry: 0 };
+  var PROG_KEEPALIVE_BYTES = 60 * 1024;   // browsers reject keepalive bodies over ~64KB
   function progLogged() { return !!(typeof apiRoot === "function" && apiRoot() && prefs.token); }
   var PROG_NOTE_BUDGET = 16384;   // 每人笔记总上限 16KB（UTF-8 字节），与后端同一规则
   function progUtf8(s) { try { return new TextEncoder().encode(String(s)).length; } catch (e) { return String(s).length; } }
@@ -134,6 +137,47 @@
     for (k in state.days) { if ((state.days[k] | 0) > 0) days[k] = state.days[k] | 0; }
     return { q: q, notes: progFitNotes(notes), days: days, goal: state.goal | 0 || 20 };
   }
+  function progBytes(obj) {
+    var s = JSON.stringify(obj);
+    try { return new TextEncoder().encode(s).length; } catch (e) { return s.length; }
+  }
+  function progDelta(full) {
+    if (!progAcked) return full;
+    var q = {}, notes = {}, days = {}, k;
+    for (k in full.q) if (JSON.stringify(full.q[k]) !== JSON.stringify((progAcked.q || {})[k])) q[k] = full.q[k];
+    for (k in full.notes) if (JSON.stringify(full.notes[k]) !== JSON.stringify((progAcked.notes || {})[k])) notes[k] = full.notes[k];
+    for (k in full.days) if ((full.days[k] | 0) > ((progAcked.days || {})[k] | 0)) days[k] = full.days[k];
+    return { q: q, notes: notes, days: days, goal: full.goal, savedAt: full.savedAt };
+  }
+  function progAckOk(sent, got) {
+    var k, a, b;
+    if (!got || typeof got !== "object") return false;
+    for (k in sent.q) {
+      a = sent.q[k]; b = got.q && got.q[k];
+      if (!b || (Number(b.at) || 0) < (Number(a.at) || 0)) return false;
+    }
+    for (k in sent.days) if (((got.days || {})[k] | 0) < (sent.days[k] | 0)) return false;
+    return true;
+  }
+  function progWhen(ms) {
+    var d = new Date(ms || Date.now());
+    function p(n) { return (n < 10 ? "0" : "") + n; }
+    return p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
+  }
+  function progStatusText() {
+    if (!progLogged()) return t("prog.local");
+    if (progSync.state === "failed") {
+      if (typeof navigator !== "undefined" && navigator.onLine === false) return t("prog.offline");
+      return t("prog.failed");
+    }
+    if (progSync.state === "saving") return t("prog.saving");
+    if (progSync.state === "ok") return t("prog.synced", { time: progWhen(progSync.at) });
+    return t("prog.pending");
+  }
+  function progPaintStatus() {
+    var el = typeof document !== "undefined" && document.querySelector && document.querySelector('[data-role="prog-sync"]');
+    if (el) el.textContent = progStatusText();
+  }
   function progMerge(srv) {
     var k, o, c;
     for (k in (srv.q || {})) { o = state.q[k]; c = srv.q[k]; if (!c || !progIsB(k)) continue;
@@ -143,29 +187,107 @@
     for (k in (srv.days || {})) state.days[k] = Math.max(state.days[k] | 0, (srv.days[k] | 0));
     state.notes = progFitNotes(state.notes);
     if ((srv.savedAt | 0) >= progSavedAt) { state.goal = srv.goal | 0 || state.goal; progSavedAt = srv.savedAt | 0; }
+    /* The acknowledgement describes the cloud snapshot, not this merged local state.
+       Remember the server entries so pagehide can upload only what changed. */
+    progAcked = progSerialize();
   }
-  function progPush(now) {
+  function progRun(flush) {
+    progTimer = null;
     if (!progLogged()) return;
-    if (typeof clearTimeout === "function") { if (progTimer) clearTimeout(progTimer); progTimer = null; }
-    var run = function () {
-      progTimer = null;
-      var p = progSerialize(), sig = JSON.stringify(p);
-      if (sig === progPushedSig && !progWipe) return;
-      p.savedAt = Date.now(); progSavedAt = p.savedAt;
-      if (progWipe) p.wipe = true;
-      if (typeof fetch !== "function") return;
-      fetch(apiRoot() + "/api/progress", { method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token },
-        body: JSON.stringify(p), keepalive: true })
-        .then(function (r) { return r.ok ? r.json() : null; })
-        .then(function (j) { if (j && j.progress) { progPushedSig = sig; progWipe = false; } })
-        .catch(function () {});
+    if (progInFlight) { progQueued = true; return; }
+    var full = progSerialize(), sig = JSON.stringify(full);
+    if (sig === progPushedSig && !progWipe) { progSync.state = "ok"; progPaintStatus(); return; }
+    var p = (progAcked && !progWipe) ? progDelta(full) : full;
+    if (flush && !progWipe && !Object.keys(p.q).length && !Object.keys(p.notes).length &&
+        !Object.keys(p.days).length && p.goal === ((progAcked && progAcked.goal) || 20)) {
+      progPushedSig = sig; progSync.state = "ok"; progPaintStatus(); return;
+    }
+    p.savedAt = Date.now(); progSavedAt = p.savedAt;
+    if (progWipe) p.wipe = true;
+    if (typeof fetch !== "function") return;
+    var bytes = progBytes(p);
+    var init = { method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: AUTH_B + prefs.token },
+      body: JSON.stringify(p) };
+    /* keepalive is only useful during pagehide/hidden. Use it when the request fits the
+       browser budget; otherwise keep the normal fetch and let the pull-on-next-open merge
+       recover anything the page could not finish. */
+    if (flush && bytes <= PROG_KEEPALIVE_BYTES) init.keepalive = true;
+    progInFlight = true; progSync.state = "saving"; progPaintStatus();
+    fetch(apiRoot() + "/api/progress", init)
+      .then(function (r) {
+        return r.json().catch(function () { return null; }).then(function (j) {
+          return { ok: !!r.ok, status: r.status | 0, j: j };
+        });
+      })
+      .then(function (res) {
+        progInFlight = false;
+        /* 200 + throttled means the backend merged only in memory and deliberately did not
+           write it (5-second write coalescing). Treating that as saved is how a device could
+           show "done" while another browser never receives the answers. Retry after the
+           throttle window instead. */
+        var accepted = res.ok && !(res.j && res.j.throttled) && progAckOk(p, res.j && res.j.progress);
+        if (accepted) {
+          progPushedSig = sig; progAcked = full; progWipe = false; progRetryN = 0;
+          progSync = { state: "ok", at: Date.now(), retry: 0 };
+          if (progRetryTimer && typeof clearTimeout === "function") clearTimeout(progRetryTimer);
+          progRetryTimer = null;
+          progPaintStatus();
+          if (progQueued) { progQueued = false; progPush(true); }
+          else if (JSON.stringify(progSerialize()) !== sig) progPush(true);
+          return;
+        }
+        progSync = { state: "failed", at: progSync.at, retry: 0 };
+        progPaintStatus();
+        /* Auth errors and oversized payloads cannot heal by retrying the same data. */
+        if (res.status === 401 || res.status === 403 || res.status === 413) return;
+        progRetryLater();
+      })
+      .catch(function () {
+        progInFlight = false;
+        progSync = { state: "failed", at: progSync.at, retry: 0 };
+        progPaintStatus();
+        progRetryLater();
+      });
+  }
+  function progRetryLater() {
+    if (progRetryTimer || progRetryN >= 4) return;
+    if (typeof setTimeout !== "function") {
+      /* No timers means the page is going away; leave the change pending so the next
+         foreground/online event can retry it. */
+      progQueued = true;
+      return;
+    }
+    var delays = [3000, 10000, 30000, 60000];
+    var delay = delays[Math.min(progRetryN, delays.length - 1)];
+    progRetryN++;
+    progSync.retry = delay;
+    progRetryTimer = setTimeout(function () {
+      progRetryTimer = null;
+      progPush(true);
+    }, delay);
+  }
+  function progPush(now, flush) {
+    flush = flush === true;   // pagehide/hidden callers pass true; saveState's extra argument must not
+    if (!progLogged()) return;
+    if (now) {
+      if (typeof clearTimeout === "function") {
+        if (progTimer) clearTimeout(progTimer);
+        if (progRetryTimer) clearTimeout(progRetryTimer);
+      }
+      progTimer = null; progRetryTimer = null;
+      progRun(flush);
+      return;
     };
-    if (now) run();
     /* 进度上报防抖 8s → 20s：每次答题都会触发 saveState，8s 一存的话一个连续刷题的人
        一小时就能写掉几百次 KV（免费额度每天只有 1000 次写）。
-       关标签/切后台仍走 progPush(true) 立即落盘，不会丢。 */
-    else if (typeof setTimeout === "function") progTimer = setTimeout(run, 20000);
+       这里是「首次修改后最多 20 秒必传」的节流，不是每次答题都重新计时；
+       后者在连续答题时会永远等不到 20 秒，切浏览器时才暴露丢进度。
+       关标签/切后台优先发 delta + keepalive；整包超过浏览器 64KB 上限时不带 keepalive。 */
+    if (progInFlight) { progQueued = true; return; }
+    if (!progTimer && !progRetryTimer && typeof setTimeout === "function") {
+      progTimer = setTimeout(function () { progRun(false); }, 20000);
+    }
   }
   function progPull() {
     if (!progLogged() || typeof fetch !== "function") return;
@@ -179,14 +301,17 @@
         }
         progMerge(j.progress);
         try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e2) {}
-        progPushedSig = ""; progPush(true);   // 本机旧进度（如未登录时刷的）也并上去
+        progPushedSig = ""; progAcked = null; progPush(true);   // 本机旧进度（如未登录时刷的）也并上去
         if (session) rerenderQuiz(); else route();
       })
-      .catch(function () {});
+      .catch(function () { progSync.state = "failed"; progPaintStatus(); });
   }
   if (typeof document !== "undefined" && document.addEventListener) {
-    document.addEventListener("pagehide", function () { progPush(true); });
-    document.addEventListener("visibilitychange", function () { if (document.hidden) progPush(true); });
+    document.addEventListener("pagehide", function () { progPush(true, true); });
+    document.addEventListener("visibilitychange", function () { progPush(true, document.hidden); });
+  }
+  if (typeof window !== "undefined" && window.addEventListener) {
+    window.addEventListener("online", function () { progRetryN = 0; progPush(true); });
   }
 
   /* ---------------- file storage (File System Access API + IndexedDB handle) ---------------- */
@@ -1502,12 +1627,13 @@
         '<p class="fineprint">' + esc(t("scope.hint")) + '</p>') +
       card(t("settings.data"), '<p><strong>' + esc(t("settings.dataInfo", { n: CAT.length, img: img })) + '</strong></p>' +
         '<p class="muted">' + esc(t("home.dataNote")) + '</p>' +
+        '<p><strong data-role="prog-sync">' + esc(progStatusText()) + '</strong></p>' +
         '<div class="q-actions"><button class="btn ghost small" data-act="export">' + ic("down") + esc(t("settings.export")) + '</button>' +
         '<label class="btn ghost small">' + ic("up") + esc(t("settings.import")) + '<input type="file" accept="application/json" data-role="import" hidden></label>' +
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v100 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v101 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------

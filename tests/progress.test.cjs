@@ -11,6 +11,8 @@ const marker = '  window.__boot = boot;';
 assert.equal(appSource.split(marker).length, 2, 'boot marker must be unique');
 const instrumented = appSource.replace(marker,
   '  window.testProg = { serialize: progSerialize, merge: progMerge, push: progPush, pull: progPull,\n' +
+  '    status: progStatusText, sync: function () { return progSync; },\n' +
+  '    saveState: saveState,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
   '    getPrefs: function () { return prefs; } };\n' + marker);
 
@@ -24,12 +26,15 @@ function stubNode() {
   };
 }
 
-function load({ prefs = {}, progress = null, ls = {} } = {}) {
-  const nodes = {}, calls = [], bodies = [];
+function load({ prefs = {}, progress = null, ls = {}, post = null } = {}) {
+  const nodes = {}, calls = [], bodies = [], inits = [];
+  const timers = [];
   const store = Object.assign({}, ls);
   const listeners = {};
+  const fakeSetTimeout = (fn, ms) => { timers.push({ fn, ms, cleared: false }); return timers.length; };
+  const fakeClearTimeout = (id) => { if (timers[id - 1]) timers[id - 1].cleared = true; };
   const context = {
-    window: { addEventListener() {}, scrollTo() {} },
+    window: { addEventListener(type, fn) { (listeners[type] = listeners[type] || []).push(fn); }, scrollTo() {} },
     console,
     location: { search: '', hash: '#/home', pathname: '/' },
     history: { replaceState() {} },
@@ -58,6 +63,8 @@ function load({ prefs = {}, progress = null, ls = {} } = {}) {
     fetch: (url, init) => {
       calls.push(String(url));
       bodies.push(init && init.body ? String(init.body) : '');
+      inits.push(init || {});
+      if (post) return post(url, init, { calls, bodies, inits });
       if (/\/api\/progress$/.test(String(url))) {
         if (init && init.method === 'POST') {
           const b = JSON.parse(init.body);
@@ -69,7 +76,9 @@ function load({ prefs = {}, progress = null, ls = {} } = {}) {
       }
       return Promise.reject(new Error('unexpected ' + url));
     },
-    setTimeout: () => 0, clearTimeout: () => {}, setInterval: () => 0, clearInterval: () => {},
+    setTimeout: fakeSetTimeout,
+    clearTimeout: fakeClearTimeout,
+    setInterval: () => 0, clearInterval: () => {},
     TextEncoder, TextDecoder,
     confirm: () => true,
   };
@@ -88,7 +97,7 @@ function load({ prefs = {}, progress = null, ls = {} } = {}) {
     const fakeEl = { getAttribute: (k) => (k === 'data-act' ? act : null), classList: { contains: () => false } };
     listeners.click.forEach((fn) => fn({ target: { closest: (sel) => (String(sel).includes('[data-act]') ? fakeEl : null) } }));
   };
-  return { context, nodes, calls, bodies, store, listeners, click };
+  return { context, nodes, calls, bodies, inits, store, listeners, timers, click };
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 20));
@@ -153,6 +162,163 @@ test('leaving the page flushes progress immediately instead of waiting for the d
   const idx = P.calls.findIndex((c, i) => /\/api\/progress$/.test(c) && (P.bodies[i] || '').includes('savedAt'));
   assert.ok(idx >= 0, 'exactly one immediate push, no polling loop');
   assert.equal(JSON.parse(P.bodies[idx]).q['1.1.01-001'].a, 1);
+});
+
+test('a 200 response without the submitted question is not accepted as saved', async () => {
+  let posts = 0;
+  const P = load({
+    prefs: signedIn,
+    progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 1 },
+    post: (_url, init) => {
+      posts++;
+      if (!init || init.method !== 'POST') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ progress: null }) });
+      }
+      /* Simulate the dangerous server reply: success status, but the submitted answer is absent. */
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({
+        ok: true, progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 2 },
+      }) });
+    },
+  });
+  P.context.window.testProg.setState({ q: { '1.1.01-001': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 50 } },
+    notes: {}, tr: {}, ai: {}, days: { '2026-10-23': 1 }, goal: 20 });
+  P.context.window.testProg.push(true);
+  await tick();
+  assert.ok(posts >= 2, 'the failed acknowledgement must schedule a retry');
+  assert.equal(P.context.window.testProg.sync().state, 'failed');
+  assert.match(P.context.window.testProg.status(), /not saved|retrying/i);
+});
+
+test('a server-side 200 with only a throttled reply never displays as synced', async () => {
+  let posts = 0;
+  const P = load({
+    prefs: signedIn,
+    progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 1 },
+    post: (_url, init) => {
+      if (!init || init.method !== 'POST') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ progress: null }) });
+      }
+      posts++;
+      const sent = JSON.parse(init.body);
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({
+        ok: true, throttled: true, progress: sent,
+      }) });
+    },
+  });
+  P.context.window.testProg.setState({ q: { '1.1.01-001': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 50 } },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  P.context.window.testProg.push(true);
+  await tick();
+  assert.ok(posts >= 1);
+  assert.equal(P.context.window.testProg.sync().state, 'failed');
+  assert.doesNotMatch(P.context.window.testProg.status(), /synced/i);
+});
+
+test('a throttled response is retried and only a durable acknowledgement marks the data saved', async () => {
+  let posts = 0, durable = false;
+  const P = load({
+    prefs: signedIn,
+    progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 1 },
+    post: (_url, init) => {
+      if (!init || init.method !== 'POST') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ progress: null }) });
+      }
+      posts++;
+      const sent = JSON.parse(init.body);
+      if (posts === 1) {
+        return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({
+          ok: true, throttled: true, progress: sent,
+        }) });
+      }
+      durable = true;
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({
+        ok: true, progress: sent,
+      }) });
+    },
+  });
+  P.context.window.testProg.setState({ q: { '1.1.01-001': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 50 } },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  P.context.window.testProg.push(true);
+  await new Promise((r) => setTimeout(r, 20));
+  P.timers.find((t) => t.ms === 3000).fn();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.ok(posts >= 2, 'throttled responses must not stop synchronization');
+  assert.equal(durable, true, 'the retry reaches a durable write');
+  assert.equal(P.context.window.testProg.sync().state, 'ok');
+});
+
+test('a large page-hide flush omits keepalive instead of exceeding the browser body limit', async () => {
+  const P = load({ prefs: signedIn });
+  const q = {};
+  for (let i = 0; i < 1116; i++) {
+    q['1.1.01-' + (1000 + i)] = { a: 2, w: 0, r: 2, last: true, wrong: false, at: 5000 + i };
+  }
+  P.context.window.testProg.setState({ q, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  P.listeners.pagehide.forEach((fn) => fn());
+  await tick();
+  const idx = P.bodies.findIndex((b) => b && b.includes('1.1.01-1000'));
+  assert.ok(idx >= 0, 'the full progress snapshot is sent');
+  assert.ok(Buffer.byteLength(P.bodies[idx]) > 60 * 1024, 'the regression case is larger than the keepalive budget');
+  assert.equal(P.inits[idx].keepalive, undefined, 'large bodies must use a normal fetch');
+});
+
+test('coming back online immediately retries instead of waiting for the next edit', async () => {
+  let failPosts = true, posts = 0;
+  const P = load({
+    prefs: signedIn,
+    progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 1 },
+    post: (_url, init) => {
+      if (!init || init.method !== 'POST') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ progress: null }) });
+      }
+      posts++;
+      if (failPosts) return Promise.reject(new Error('offline'));
+      const sent = JSON.parse(init.body);
+      return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, progress: sent }) });
+    },
+  });
+  P.context.window.testProg.setState({ q: { '1.1.01-001': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 50 } },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  P.context.window.testProg.push(true);
+  await tick();
+  assert.equal(P.context.window.testProg.sync().state, 'failed');
+  failPosts = false;
+  assert.ok(P.listeners.online && P.listeners.online.length, 'online listener must be registered');
+  P.listeners.online.forEach((fn) => fn());
+  await tick();
+  assert.ok(posts >= 2, 'coming online retries without another user edit');
+  assert.equal(P.context.window.testProg.sync().state, 'ok');
+});
+
+test('a small page-hide delta still uses keepalive', async () => {
+  const P = load({ prefs: signedIn });
+  P.context.window.testProg.setState({ q: { '1.1.01-001': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 50 } },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  P.listeners.pagehide.forEach((fn) => fn());
+  await tick();
+  const idx = P.bodies.findIndex((b) => b && b.includes('1.1.01-001'));
+  assert.ok(idx >= 0);
+  assert.equal(P.inits[idx].keepalive, true);
+});
+
+test('continuous edits use a throttle rather than restarting the upload timer forever', () => {
+  const P = load({ prefs: signedIn, progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 1 } });
+  P.context.window.testProg.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  const saveState = P.context.window.testProg.saveState;
+  for (let i = 0; i < 5; i++) saveState();
+  const uploads = P.timers.filter((timer) => timer.ms === 20000);
+  assert.equal(uploads.length, 1, 'repeated edits must share one pending upload timer');
+});
+
+test('a successful durable upload exposes a last-sync time in Settings', async () => {
+  const P = load({ prefs: signedIn });
+  P.context.window.testProg.setState({ q: { '1.1.01-001': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 50 } },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  P.context.window.testProg.push(true);
+  await tick();
+  assert.equal(P.context.window.testProg.sync().state, 'ok');
+  assert.match(P.context.window.testProg.status(), /synced|saved/i);
+  assert.match(appSource, /data-role="prog-sync"/, 'Settings must show the synchronization state');
 });
 
 test('serialize drops false last/wrong so a full catalog fits the server cap', () => {
