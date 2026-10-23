@@ -7,6 +7,7 @@ const { test } = require('node:test');
 
 const appSource = fs.readFileSync(require.resolve('../app.js'), 'utf8');
 const i18nSource = fs.readFileSync(require.resolve('../i18n.js'), 'utf8');
+const scopeSource = fs.readFileSync(require.resolve('../data/scope.js'), 'utf8');
 const marker = '  window.__boot = boot;';
 assert.equal(appSource.split(marker).length, 2, 'boot marker must be unique');
 const instrumented = appSource.replace(marker,
@@ -83,6 +84,7 @@ function load({ prefs = {}, progress = null, ls = {}, post = null } = {}) {
     confirm: () => true,
   };
   vm.runInNewContext(i18nSource, context);
+  vm.runInNewContext(scopeSource, context);
   vm.runInNewContext(instrumented, context);
   context.window.__CATALOG = [
     { id: '1.1.01-001', th: '1.1', ch: '1.1.01', thd: 'T', the: 'T', chd: 'C', che: 'C',
@@ -333,6 +335,28 @@ test('serialize drops false last/wrong so a full catalog fits the server cap', (
   assert.ok(JSON.stringify(p).length < 262144, 'full upload must fit the 256KB cap');
 });
 
+test('valid Class B IDs ending in zero are not rejected by the sync scope', () => {
+  const P = load({ prefs: signedIn });
+  P.context.window.testProg.setState({
+    q: {
+      '2.1.03-030': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 50 },
+      '2.1.07-018': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 51 },
+      '2.1.03-112': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 52 },
+    },
+    notes: {
+      '2.1.03-030': { text: 'B note', at: 50 },
+      '2.1.03-112': { text: 'non-B note', at: 52 },
+    },
+    tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  const p = P.context.window.testProg.serialize();
+  assert.ok(p.q['2.1.03-030'], 'a valid B ID ending in zero must upload');
+  assert.ok(p.q['2.1.07-018'], 'another valid B ID ending in zero must upload');
+  assert.ok(p.notes['2.1.03-030'], 'its note must upload too');
+  assert.equal(p.q['2.1.03-112'], undefined, 'the audited non-B exclusion still applies');
+  assert.equal(p.notes['2.1.03-112'], undefined, 'the audited non-B note exclusion still applies');
+});
+
 test('an already-logged-in boot pulls cloud progress without a fresh login', async () => {
   const cloud = { q: { '1.1.01-002': { a: 4, w: 0, r: 4, last: true, wrong: false, at: 9000 } },
     notes: {}, days: {}, goal: 20, savedAt: 9000 };
@@ -368,19 +392,19 @@ test('non-B questions never leave the device', async () => {
   const P = load({ prefs: signedIn });
   P.context.window.testProg.setState({
     q: { '1.1.01-001': { a: 2, w: 0, r: 2, last: true, wrong: false, at: 10 },
-         '2.2.03-001': { a: 5, w: 5, r: 0, last: false, wrong: true, at: 11 } },
-    notes: { '1.1.01-001': { text: 'b note', at: 10 }, '2.2.03-001': { text: 'non-b note', at: 11 } },
+         '2.1.03-112': { a: 5, w: 5, r: 0, last: false, wrong: true, at: 11 } },
+    notes: { '1.1.01-001': { text: 'b note', at: 10 }, '2.1.03-112': { text: 'non-b note', at: 11 } },
     tr: {}, ai: {}, days: {}, goal: 20 });
   const p = P.context.window.testProg.serialize();
   assert.equal(p.q['1.1.01-001'].a, 2, 'B progress uploads');
-  assert.equal(p.q['2.2.03-001'], undefined, 'non-B progress stays local');
+  assert.equal(p.q['2.1.03-112'], undefined, 'non-B progress stays local');
   assert.equal(p.notes['1.1.01-001'].text, 'b note', 'B note uploads');
-  assert.equal(p.notes['2.2.03-001'], undefined, 'non-B note stays local');
-  P.context.window.testProg.merge({ q: { '2.2.03-001': { a: 9, w: 0, r: 9, last: true, wrong: false, at: 99999 } },
-    notes: { '2.2.03-001': { text: 'cloud note', at: 99999 } }, days: {}, goal: 20, savedAt: 99999 });
+  assert.equal(p.notes['2.1.03-112'], undefined, 'non-B note stays local');
+  P.context.window.testProg.merge({ q: { '2.1.03-112': { a: 9, w: 0, r: 9, last: true, wrong: false, at: 99999 } },
+    notes: { '2.1.03-112': { text: 'cloud note', at: 99999 } }, days: {}, goal: 20, savedAt: 99999 });
   const st = P.context.window.testProg.getState();
-  assert.equal(st.q['2.2.03-001'].a, 5, 'cloud non-B must not overwrite local');
-  assert.equal(st.notes['2.2.03-001'].text, 'non-b note', 'cloud non-B note must not come down');
+  assert.equal(st.q['2.1.03-112'].a, 5, 'cloud non-B must not overwrite local');
+  assert.equal(st.notes['2.1.03-112'].text, 'non-b note', 'cloud non-B note must not come down');
 });
 
 test('notes are capped at 16KB per person, newest wins', () => {

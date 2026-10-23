@@ -240,3 +240,13 @@ test('the dialog renders one Stripe button, no Paddle, no method or currency ent
   assert.equal(/data-currency=/.test(dialog), false, 'no per-currency button any more');
   assert.equal(/paddleLocal|stripe_methods/.test(dialog), false, 'no dead gating code may come back');
 });
+
+test('the privacy policy discloses account-based Class B progress sync', () => {
+  const privacy = read('privacy.html');
+  assert.match(privacy, /登录后[^<]*Class B[^<]*Cloudflare D1/,
+    'privacy policy must disclose that signed-in Class B progress is stored in D1');
+  assert.match(privacy, /signed in, Class B progress[^<]*sync to Cloudflare D1/i,
+    'the English summary must disclose the same transfer');
+  assert.equal(/做题进度[^。]*只保存在你自己的浏览器里[^。]*不会上传到服务器/.test(privacy), false,
+    'the obsolete claim that progress is never uploaded must stay removed');
+});
