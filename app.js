@@ -63,7 +63,7 @@
     buildIndex();
   }
   var state = load("dtt.state.v1", { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
-  var RESUME_KEY = "dtt.resume.v1";
+  var RESUME_KEY = "dtt.resume.v1", RESUME_WRONG_KEY = "dtt.resume.wrong.v1";
   var prefs = load("dtt.prefs", { uiLang: "en", contentLang: "en", theme: "light", explLang: "en", scope: "b", donateLink: "", donateQR: "", buyUrl: "", lic: "", licBase: "", uid: "", user: "", freeLeft: 10, apiBase: "", token: "", serverLeft: null, googleClientId: "", unlimited: false });
   if (["zhen", "zh", "en", "de"].indexOf(prefs.contentLang) < 0) prefs.contentLang = "en";
   if (["zh", "en", "de"].indexOf(prefs.explLang) < 0) prefs.explLang = "en";
@@ -101,7 +101,17 @@
         hash.indexOf("at=" + encodeURIComponent(id)) < 0) return null;
     return { id: id, hash: hash, at: at };
   }
+  function progWrongHash(hash) { return /(?:[?&])src=wrong(?:&|$)/.test(String(hash || "")); }
+  function progResumeWrongValue(v) {
+    var r = progResumeValue(v);
+    return r && progWrongHash(r.hash) ? r : null;
+  }
   function progResumeLocal() { return progResumeValue(load(RESUME_KEY, {})); }
+  function progResumeWrongLocal() { return progResumeWrongValue(load(RESUME_WRONG_KEY, {})); }
+  function progResumeNewer(next, acked) {
+    return !!next && (!acked || next.at > acked.at ||
+      (next.at === acked.at && next.hash !== acked.hash));
+  }
   var progTimer = null, progRetryTimer = null, progRetryN = 0, progInFlight = false, progQueued = false;
   var progWipe = false, progPushedSig = "", progAcked = null, progSavedAt = 0;
   var progSync = { state: "idle", at: 0, retry: 0 };
@@ -148,6 +158,8 @@
     var out = { q: q, notes: progFitNotes(notes), days: days, goal: state.goal | 0 || 20 };
     var resume = progResumeLocal();
     if (resume) out.resume = resume;
+    var wrongResume = progResumeWrongLocal() || (progWrongHash(resume && resume.hash) ? resume : null);
+    if (wrongResume) out.resumeWrong = wrongResume;
     return out;
   }
   function progBytes(obj) {
@@ -161,8 +173,8 @@
     for (k in full.notes) if (JSON.stringify(full.notes[k]) !== JSON.stringify((progAcked.notes || {})[k])) notes[k] = full.notes[k];
     for (k in full.days) if ((full.days[k] | 0) > ((progAcked.days || {})[k] | 0)) days[k] = full.days[k];
     var out = { q: q, notes: notes, days: days, goal: full.goal, savedAt: full.savedAt };
-    if (full.resume && (!progAcked.resume || full.resume.at > progAcked.resume.at ||
-        (full.resume.at === progAcked.resume.at && full.resume.hash !== progAcked.resume.hash))) out.resume = full.resume;
+    if (progResumeNewer(full.resume, progAcked.resume)) out.resume = full.resume;
+    if (progResumeNewer(full.resumeWrong, progAcked.resumeWrong)) out.resumeWrong = full.resumeWrong;
     return out;
   }
   function progAckOk(sent, got) {
@@ -176,6 +188,10 @@
     if (sent.resume) {
       var gr = progResumeValue(got.resume);
       if (!gr || gr.at < sent.resume.at || (gr.at === sent.resume.at && gr.id !== sent.resume.id)) return false;
+    }
+    if (sent.resumeWrong) {
+      var gw = progResumeWrongValue(got.resumeWrong);
+      if (!gw || gw.at < sent.resumeWrong.at || (gw.at === sent.resumeWrong.at && gw.id !== sent.resumeWrong.id)) return false;
     }
     return true;
   }
@@ -211,6 +227,11 @@
     if (remoteResume && (!localResume || remoteResume.at >= localResume.at)) {
       try { localStorage.setItem(RESUME_KEY, JSON.stringify(remoteResume)); } catch (e) {}
     }
+    var remoteWrongResume = progResumeWrongValue(srv.resumeWrong) || progResumeWrongValue(srv.resume);
+    var localWrongResume = progResumeWrongLocal();
+    if (remoteWrongResume && (!localWrongResume || remoteWrongResume.at >= localWrongResume.at)) {
+      try { localStorage.setItem(RESUME_WRONG_KEY, JSON.stringify(remoteWrongResume)); } catch (e2) {}
+    }
     /* The acknowledgement describes the cloud snapshot, not this merged local state.
        Remember the server entries so pagehide can upload only what changed. */
     progAcked = progSerialize();
@@ -223,7 +244,8 @@
     if (sig === progPushedSig && !progWipe) { progSync.state = "ok"; progPaintStatus(); return; }
     var p = (progAcked && !progWipe) ? progDelta(full) : full;
     if (flush && !progWipe && !Object.keys(p.q).length && !Object.keys(p.notes).length &&
-        !Object.keys(p.days).length && !p.resume && p.goal === ((progAcked && progAcked.goal) || 20)) {
+        !Object.keys(p.days).length && !p.resume && !p.resumeWrong &&
+        p.goal === ((progAcked && progAcked.goal) || 20)) {
       progPushedSig = sig; progSync.state = "ok"; progPaintStatus(); return;
     }
     p.savedAt = Date.now(); progSavedAt = p.savedAt;
@@ -652,8 +674,8 @@
     document.querySelectorAll('[data-act="resume-last"]').forEach(function (el) { el.setAttribute("href", href); });
   }
   function wrongResumeInfo() {
-    var r = progResumeLocal();
-    if (!r || r.hash.indexOf("src=wrong") < 0) return null;
+    var r = progResumeWrongLocal();
+    if (!r) return null;
     var query = r.hash.slice(r.hash.indexOf("?") + 1), ids = "";
     query.split("&").forEach(function (kv) {
       var pair = kv.split("=");
@@ -960,9 +982,12 @@
         else out.push(kv);
       });
       if (!seen) out.push("at=" + encodeURIComponent(id));
-      var nh = base + "?" + out.join("&");
+      var nh = base + "?" + out.join("&"), stamp = Date.now(), resume = { id: id, hash: nh, at: stamp };
       if (nh !== h) { try { history.replaceState(null, "", location.pathname + nh); } catch (e2) {} }
-      try { localStorage.setItem(RESUME_KEY, JSON.stringify({ id: id, hash: nh, at: Date.now() })); } catch (e3) {}
+      try {
+        localStorage.setItem(RESUME_KEY, JSON.stringify(resume));
+        if (progWrongHash(nh)) localStorage.setItem(RESUME_WRONG_KEY, JSON.stringify(resume));
+      } catch (e3) {}
       session.key = nh.replace(/^#\/?/, "");
       progPush();
     } catch (e) {}
@@ -1765,7 +1790,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v110 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v111 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2387,7 +2412,7 @@
     if (act === "unwrong") { var id = el.getAttribute("data-id"); var s = qState(id); s.wrong = false; s.at = Date.now(); saveState(); route(); toast(t("wrong.mastered")); return; }
     if (act === "wrong-relearn") { var rid = el.getAttribute("data-id"); toggleWrong(rid); route(); toast(t("quiz.addedWrong")); return; }
     if (act === "export") { exportData(); return; }
-    if (act === "reset") { if (confirm(t("settings.resetConfirm"))) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = Date.now(); progWipe = true; saveState(); toast(t("settings.resetDone")); route(); } return; }
+    if (act === "reset") { if (confirm(t("settings.resetConfirm"))) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = Date.now(); progWipe = true; try { localStorage.removeItem(RESUME_KEY); localStorage.removeItem(RESUME_WRONG_KEY); } catch (e) {} saveState(); toast(t("settings.resetDone")); route(); } return; }
     if (act === "ai-save") { var base = val("ai-base"), key = val("ai-key"), model = "auto"; localStorage.setItem("dtt.ai", JSON.stringify({ base: base, key: key, model: model })); var s2 = document.querySelector('[data-role="ai-status"]'); if (s2) s2.textContent = window.AI.hasLLM() ? t("ai.llmBadge") : t("ai.offlineBadge"); toast(t("settings.aiSaved")); return; }
     if (act === "ai-clear") { localStorage.removeItem("dtt.ai"); document.getElementById("view").innerHTML = vSettings(); toast(t("settings.aiClear")); return; }
     if (act === "pay") { doCheckout(el.getAttribute("data-provider"), el.getAttribute("data-currency"), el.getAttribute("data-method")); return; }
@@ -2424,7 +2449,7 @@
       }
       doLogin(authVal("a-name")); return;
     }
-    if (act === "logout") { var hadToken = !!prefs.token; prefs.user = ""; prefs.uid = ""; prefs.lic = ""; prefs.token = ""; prefs.serverLeft = null; savePrefs(); syncUser(); try { localStorage.removeItem("dtt.ai"); localStorage.removeItem(RESUME_KEY); } catch (e) {} if (hadToken) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = 0; progPushedSig = ""; try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e2) {} } if (session) rerenderQuiz(); else route(); renderTopbar(); toast(t("login.bye")); return; }
+    if (act === "logout") { var hadToken = !!prefs.token; prefs.user = ""; prefs.uid = ""; prefs.lic = ""; prefs.token = ""; prefs.serverLeft = null; savePrefs(); syncUser(); try { localStorage.removeItem("dtt.ai"); localStorage.removeItem(RESUME_KEY); localStorage.removeItem(RESUME_WRONG_KEY); } catch (e) {} if (hadToken) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = 0; progPushedSig = ""; try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e2) {} } if (session) rerenderQuiz(); else route(); renderTopbar(); toast(t("login.bye")); return; }
     if (act === "ai-unlock2") { unlockApply(unlockKeyFrom("lk2")); return; }
     if (act === "ai-unlock") { unlockApply(unlockKeyFrom("lkey")); return; }
     if (act === "support") { showSupport(); return; }

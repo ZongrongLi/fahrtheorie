@@ -321,6 +321,28 @@ test('serialize carries the exact resume session and question position', () => {
     'the cloud payload must include the exact session hash and current question');
 });
 
+test('serialize keeps the wrong-book resume separate from the general resume', () => {
+  const P = load({ prefs: signedIn });
+  P.context.window.testProg.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  const general = {
+    id: '2.2.30-102',
+    hash: '#/practice?c=2.2&m=all&s=seq&at=2.2.30-102',
+    at: 400,
+  };
+  const wrong = {
+    id: '1.1.01-002',
+    hash: '#/practice?ids=1.1.01-002%2C1.1.01-001&src=wrong&at=1.1.01-002',
+    at: 300,
+  };
+  P.store['dtt.resume.v1'] = JSON.stringify(general);
+  P.store['dtt.resume.wrong.v1'] = JSON.stringify(wrong);
+  const payload = P.context.window.testProg.serialize();
+  assert.equal(JSON.stringify(payload.resume), JSON.stringify(general),
+    'normal practice keeps its own resume position');
+  assert.equal(JSON.stringify(payload.resumeWrong), JSON.stringify(wrong),
+    'wrong-book practice keeps a separate resume position');
+});
+
 test('a page-hide upload sends a resume-only position change', async () => {
   const P = load({ prefs: signedIn, progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 1 } });
   await tick();
@@ -348,6 +370,26 @@ test('cloud resume position is installed when the account is opened in another b
   await tick();
   assert.equal(JSON.stringify(JSON.parse(P.store['dtt.resume.v1'])), JSON.stringify(resume),
     'the newer account resume position must replace the empty local one');
+});
+
+test('cloud wrong-book resume is installed without replacing the general resume', async () => {
+  const general = {
+    id: '2.2.30-102',
+    hash: '#/practice?c=2.2&m=all&s=seq&at=2.2.30-102',
+    at: 600,
+  };
+  const wrong = {
+    id: '1.1.01-001',
+    hash: '#/practice?ids=1.1.01-002%2C1.1.01-001&src=wrong&at=1.1.01-001',
+    at: 500,
+  };
+  const P = load({ prefs: signedIn, progress: {
+    q: {}, notes: {}, days: {}, goal: 20, savedAt: 600, resume: general, resumeWrong: wrong,
+  } });
+  await tick();
+  assert.equal(JSON.stringify(JSON.parse(P.store['dtt.resume.v1'])), JSON.stringify(general));
+  assert.equal(JSON.stringify(JSON.parse(P.store['dtt.resume.wrong.v1'])), JSON.stringify(wrong),
+    'the account must restore the dedicated wrong-book session too');
 });
 
 test('continuous edits use a throttle rather than restarting the upload timer forever', () => {
@@ -611,7 +653,12 @@ test('wrong book shows the exact saved wrong-session position', () => {
     notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
   });
   const saved = '#/practice?ids=1.1.01-001%2C1.1.01-002&src=wrong&at=1.1.01-002';
-  P.store['dtt.resume.v1'] = JSON.stringify({ id: '1.1.01-002', hash: saved, at: 300 });
+  P.store['dtt.resume.v1'] = JSON.stringify({
+    id: '1.1.01-001',
+    hash: '#/practice?c=1.1&m=all&s=seq&at=1.1.01-001',
+    at: 400,
+  });
+  P.store['dtt.resume.wrong.v1'] = JSON.stringify({ id: '1.1.01-002', hash: saved, at: 300 });
   const wrong = W.wrongView('', '', '');
   assert.match(wrong, /class="card wrong-resume"/, 'the wrong book exposes an in-page resume card');
   assert.match(wrong, /Question 2 \/ 2/, 'the card shows the saved position in the wrong session');
