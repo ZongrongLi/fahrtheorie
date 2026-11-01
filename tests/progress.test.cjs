@@ -308,6 +308,48 @@ test('a small page-hide delta still uses keepalive', async () => {
   assert.equal(P.inits[idx].keepalive, true);
 });
 
+test('serialize carries the exact resume session and question position', () => {
+  const P = load({ prefs: signedIn });
+  P.context.window.testProg.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  const resume = {
+    id: '1.1.01-002',
+    hash: '#/practice?ids=1.1.01-002%2C1.1.01-001&src=wrong&at=1.1.01-002',
+    at: 300,
+  };
+  P.store['dtt.resume.v1'] = JSON.stringify(resume);
+  assert.equal(JSON.stringify(P.context.window.testProg.serialize().resume), JSON.stringify(resume),
+    'the cloud payload must include the exact session hash and current question');
+});
+
+test('a page-hide upload sends a resume-only position change', async () => {
+  const P = load({ prefs: signedIn, progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 1 } });
+  await tick();
+  P.store['dtt.resume.v1'] = JSON.stringify({
+    id: '1.1.01-002',
+    hash: '#/practice?ids=1.1.01-002%2C1.1.01-001&src=wrong&at=1.1.01-002',
+    at: 300,
+  });
+  P.listeners.pagehide.forEach((fn) => fn());
+  await tick();
+  const upload = P.bodies.map((body) => {
+    try { return JSON.parse(body); } catch (e) { return null; }
+  }).find((body) => body && body.resume);
+  assert.ok(upload, 'a changed resume position must not be discarded by the empty-delta fast path');
+  assert.equal(upload.resume.id, '1.1.01-002');
+});
+
+test('cloud resume position is installed when the account is opened in another browser', async () => {
+  const resume = {
+    id: '1.1.01-001',
+    hash: '#/practice?ids=1.1.01-002%2C1.1.01-001&src=wrong&at=1.1.01-001',
+    at: 500,
+  };
+  const P = load({ prefs: signedIn, progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 500, resume } });
+  await tick();
+  assert.equal(JSON.stringify(JSON.parse(P.store['dtt.resume.v1'])), JSON.stringify(resume),
+    'the newer account resume position must replace the empty local one');
+});
+
 test('continuous edits use a throttle rather than restarting the upload timer forever', () => {
   const P = load({ prefs: signedIn, progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 1 } });
   P.context.window.testProg.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
