@@ -30,7 +30,8 @@
     moon: '<path d="M20 14.5A8 8 0 0 1 9.5 4 8 8 0 1 0 20 14.5Z"/>',
     refresh: '<path d="M20 11a8 8 0 0 0-14-4.5L4 9"/><path d="M4 4v5h5"/><path d="M4 13a8 8 0 0 0 14 4.5L20 15"/><path d="M20 20v-5h-5"/>',
     flag: '<path d="M6 21V4h12l-2.5 4L18 12H6"/>',
-    layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>'
+    layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>'
   };
   function ic(name, cls) {
     return '<svg class="ic ' + (cls || "") + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (IC[name] || "") + "</svg>";
@@ -662,6 +663,12 @@
     var qi = full.indexOf("?");
     var path = qi >= 0 ? full.slice(0, qi) : full;
     var query = qi >= 0 ? full.slice(qi + 1) : "";
+    var queryArgs = {};
+    query.split("&").forEach(function (kv) {
+      if (!kv) return;
+      var pair = kv.split("="), k = pair[0], v = pair.slice(1).join("=");
+      try { queryArgs[decodeURIComponent(k)] = decodeURIComponent(v || ""); } catch (e) {}
+    });
     var h = path.split("/");
     var key = path + (query ? "?" + query : "");
     var view = h[0] || "home";
@@ -670,7 +677,7 @@
     else if (view === "categories") app.innerHTML = vCategories();
     else if (view === "cat") app.innerHTML = vCat(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""));
     else if (view === "practice") { if (!session || session.key !== key) startFromRoute(query, key); app.innerHTML = vQuiz(); }
-    else if (view === "wrong") app.innerHTML = vWrong(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""));
+    else if (view === "wrong") app.innerHTML = vWrong(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""), queryArgs.view || "");
     else if (view === "notes") app.innerHTML = vNotes();
     else if (view === "exam") app.innerHTML = session && session.mode === "exam" ? vExam() : vExamHome();
     else if (view === "settings") app.innerHTML = vSettings();
@@ -1608,25 +1615,39 @@
   }
 
   /* ---------------- wrong book ---------------- */
-  function vWrong(th, ch) {
-    var arr = CAT.filter(function (q) { return state.q[q.id] && state.q[q.id].wrong; });
+  function vWrong(th, ch, view) {
+    var mode = view === "mastered" ? "mastered" : "current";
+    var current = CAT.filter(function (q) { return state.q[q.id] && state.q[q.id].wrong; });
+    var mastered = CAT.filter(function (q) {
+      var st = state.q[q.id];
+      return st && (st.w | 0) > 0 && !st.wrong;
+    });
+    var arr = mode === "mastered" ? mastered : current;
     if (th) arr = arr.filter(function (q) { return q._th === th && (!ch || q._ch === ch); });
-    var byTheme = {};
-    arr.forEach(function (q) { (byTheme[q._th] = byTheme[q._th] || []).push(q); });
-    var head = '<section class="page-h"><span class="eyebrow">' + ic("alert") + esc(t("wrong.title")) + '</span><h1>' + esc(t("wrong.title")) + '</h1><p class="lede">' + esc(t("wrong.sub")) + '</p>' +
-      '<div class="chips"><a class="chip' + (!th ? " on" : "") + '" href="#/wrong">' + esc(t("wrong.allCats")) + '</a>' +
+    var suffix = mode === "mastered" ? "?view=mastered" : "";
+    var head = '<section class="page-h"><span class="eyebrow">' + ic("alert") + esc(t("wrong.title")) + '</span><h1>' + esc(t("wrong.title")) + '</h1><p class="lede">' + esc(t(mode === "mastered" ? "wrong.masteredSub" : "wrong.sub")) + '</p>' +
+      '<div class="seg" role="group" aria-label="' + esc(t("wrong.title")) + '">' +
+        '<a class="seg-btn' + (mode === "current" ? " on" : "") + '" href="#/wrong">' + esc(t("wrong.currentTab", { n: current.length })) + '</a>' +
+        '<a class="seg-btn' + (mode === "mastered" ? " on" : "") + '" href="#/wrong?view=mastered">' + esc(t("wrong.masteredTab", { n: mastered.length })) + '</a>' +
+      '</div>' +
+      '<div class="chips" style="margin-top:14px"><a class="chip' + (!th ? " on" : "") + '" href="#/wrong' + suffix + '">' + esc(t("wrong.allCats")) + '</a>' +
       INDEX.themes.filter(function (T) { return arr.some(function (q) { return q._th === T.th; }); }).map(function (T) {
-        return '<a class="chip' + (th === T.th ? " on" : "") + '" href="#/wrong/' + encodeURIComponent(T.th) + '">' + esc(T.thz || trName(T.thd, T.the, zhTheme(T.th))) + '</a>';
+        return '<a class="chip' + (th === T.th ? " on" : "") + '" href="#/wrong/' + encodeURIComponent(T.th) + suffix + '">' + esc(T.thz || trName(T.thd, T.the, zhTheme(T.th))) + '</a>';
       }).join("") + '</div>';
-    if (!arr.length) return head + '<div class="empty card"><h2>' + esc(t("wrong.empty")) + '</h2><a class="btn primary" href="#/categories">' + esc(t("wrong.emptyAction")) + '</a></div></section>';
+    if (!arr.length) return head + '<div class="empty card"><h2>' + esc(t(mode === "mastered" ? "wrong.masteredEmpty" : "wrong.empty")) + '</h2>' +
+      (mode === "mastered" ? "" : '<a class="btn primary" href="#/categories">' + esc(t("wrong.emptyAction")) + '</a>') + '</div></section>';
+    var practiceHref = '#/practice?ids=' + encodeURIComponent(arr.map(function (q) { return q.id; }).join(",")) + '&src=wrong';
     return head +
-      '<div class="hero-cta"><a class="btn primary" href="#/practice?ids=' + encodeURIComponent(arr.map(function (q) { return q.id; }).join(",")) + '&src=wrong">' + ic("refresh") + esc(t("wrong.retryAll")) + '</a><span class="muted">' + esc(t("wrong.count", { n: arr.length })) + '</span></div>' +
+      '<div class="hero-cta"><a class="btn primary" href="' + practiceHref + '">' + ic("refresh") + esc(t("wrong.retryAll")) + '</a><span class="muted">' + esc(t("wrong.count", { n: arr.length })) + '</span></div>' +
       '<div class="wrong-list">' + arr.map(function (q) {
         var st = state.q[q.id];
-        return '<div class="wrong-row"><a class="wr-main" href="#/practice?ids=' + encodeURIComponent(arr.map(function (x) { return x.id; }).join(",")) + '&at=' + encodeURIComponent(q.id) + '&src=wrong">' +
+        return '<div class="wrong-row"><a class="wr-main" href="' + practiceHref + '&at=' + encodeURIComponent(q.id) + '">' +
           '<span class="qid">' + esc(q.id) + '</span><span class="wr-text">' + esc(q.qe) + '</span>' +
-          '<span class="wr-meta">' + esc(thName(q)) + ' · ' + esc(st.w > 0 ? t("wrong.wrongTimes", { n: st.w }) : t("wrong.manual")) + '</span></a>' +
-          '<button class="iconbtn" data-act="unwrong" data-id="' + esc(q.id) + '" title="' + esc(t("wrong.remove")) + '">' + ic("trash") + '</button></div>';
+          '<span class="wr-meta">' + esc(thName(q)) + ' · ' + esc(st.w > 0 ? t("wrong.wrongTimes", { n: st.w }) : t("wrong.manual")) + (mode === "mastered" ? ' · ' + esc(t("wrong.mastered")) : '') + '</span></a>' +
+          (mode === "mastered"
+            ? '<button class="iconbtn" data-act="wrong-relearn" data-id="' + esc(q.id) + '" title="' + esc(t("wrong.addBack")) + '">' + ic("plus") + '</button>'
+            : '<button class="iconbtn" data-act="unwrong" data-id="' + esc(q.id) + '" title="' + esc(t("wrong.remove")) + '">' + ic("trash") + '</button>') +
+          '</div>';
       }).join("") + '</div></section>';
   }
 
@@ -1666,7 +1687,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v103 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v104 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2280,6 +2301,7 @@
     if (act === "translate") return aiTranslate(currentQ());
     if (act === "random") { go("#/practice?c=ALL&m=all&s=rnd"); return; }
     if (act === "unwrong") { var id = el.getAttribute("data-id"); var s = qState(id); s.wrong = false; s.at = Date.now(); saveState(); route(); toast(t("wrong.mastered")); return; }
+    if (act === "wrong-relearn") { var rid = el.getAttribute("data-id"); toggleWrong(rid); route(); toast(t("quiz.addedWrong")); return; }
     if (act === "export") { exportData(); return; }
     if (act === "reset") { if (confirm(t("settings.resetConfirm"))) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = Date.now(); progWipe = true; saveState(); toast(t("settings.resetDone")); route(); } return; }
     if (act === "ai-save") { var base = val("ai-base"), key = val("ai-key"), model = "auto"; localStorage.setItem("dtt.ai", JSON.stringify({ base: base, key: key, model: model })); var s2 = document.querySelector('[data-role="ai-status"]'); if (s2) s2.textContent = window.AI.hasLLM() ? t("ai.llmBadge") : t("ai.offlineBadge"); toast(t("settings.aiSaved")); return; }

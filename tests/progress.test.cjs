@@ -17,7 +17,7 @@ const instrumented = appSource.replace(marker,
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
   '    getPrefs: function () { return prefs; } };\n' +
   '  window.testWrong = { recordAnswer: recordAnswer, revealAnswer: revealAnswer, grade: grade,\n' +
-  '    gradeExam: gradeExam, toggleWrong: toggleWrong,\n' +
+  '    gradeExam: gradeExam, toggleWrong: toggleWrong, wrongView: vWrong,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
   '    getSession: function () { return session; }, setSession: function (s) { session = s; } };\n' + marker);
 
@@ -487,4 +487,23 @@ test('a correct mock-exam answer also clears an existing wrong-book flag', () =>
   W.gradeExam();
   assert.equal(W.getState().q['1.1.01-001'].wrong, false, 'exam grading uses the shared answer rule');
   assert.equal(W.getState().q['1.1.01-001'].r, 1);
+});
+
+test('the wrong book exposes mastered mistakes separately and allows adding them back', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({
+    q: {
+      '1.1.01-001': { a: 2, w: 1, r: 1, last: false, wrong: true, at: 1 },
+      '1.1.01-002': { a: 2, w: 1, r: 1, last: true, wrong: false, at: 2 },
+    },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  const current = W.wrongView('', '', '');
+  const mastered = W.wrongView('', '', 'mastered');
+  assert.match(current, /Q1/, 'the current tab shows mistakes still to review');
+  assert.doesNotMatch(current, /Q2/, 'the current tab hides mastered mistakes');
+  assert.match(mastered, /Q2/, 'the mastered tab shows answered mistakes');
+  assert.doesNotMatch(mastered, /Q1/, 'the mastered tab hides active mistakes');
+  assert.match(mastered, /data-act="wrong-relearn"/, 'mastered mistakes can be added back');
 });
