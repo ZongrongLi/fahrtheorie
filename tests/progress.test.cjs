@@ -599,3 +599,22 @@ test('home continue restores the exact saved practice set and source', () => {
   assert.match(home, /src=wrong/, 'resume keeps the original wrong-book source');
   assert.match(home, /at=1\.1\.01-001/, 'resume lands on the exact saved question');
 });
+
+test('wrong book shows the exact saved wrong-session position', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({
+    q: {
+      '1.1.01-001': { a: 1, w: 1, r: 0, last: false, wrong: true, at: 100 },
+      '1.1.01-002': { a: 1, w: 1, r: 0, last: false, wrong: true, at: 200 },
+    },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  const saved = '#/practice?ids=1.1.01-001%2C1.1.01-002&src=wrong&at=1.1.01-002';
+  P.store['dtt.resume.v1'] = JSON.stringify({ id: '1.1.01-002', hash: saved, at: 300 });
+  const wrong = W.wrongView('', '', '');
+  assert.match(wrong, /class="card wrong-resume"/, 'the wrong book exposes an in-page resume card');
+  assert.match(wrong, /Question 2 \/ 2/, 'the card shows the saved position in the wrong session');
+  assert.match(wrong, /data-act="resume-last"/, 'the card is a resume action');
+  assert.match(wrong, /at=1\.1\.01-002/, 'the card keeps the exact saved question');
+});

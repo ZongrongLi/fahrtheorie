@@ -651,6 +651,20 @@
     var href = resumeHref(contQ.id, contQ._th || "ALL");
     document.querySelectorAll('[data-act="resume-last"]').forEach(function (el) { el.setAttribute("href", href); });
   }
+  function wrongResumeInfo() {
+    var r = progResumeLocal();
+    if (!r || r.hash.indexOf("src=wrong") < 0) return null;
+    var query = r.hash.slice(r.hash.indexOf("?") + 1), ids = "";
+    query.split("&").forEach(function (kv) {
+      var pair = kv.split("=");
+      if (pair[0] === "ids") {
+        try { ids = decodeURIComponent(pair.slice(1).join("=")); } catch (e) {}
+      }
+    });
+    var list = ids.split(",").filter(Boolean), ix = list.indexOf(r.id);
+    if (ix < 0) return null;
+    return { href: r.hash, id: r.id, i: ix + 1, n: list.length };
+  }
   function recordAnswer(q, ok) {
     var st = qState(q.id);
     st.a = (st.a | 0) + 1;
@@ -1681,6 +1695,14 @@
     var arr = mode === "mastered" ? mastered : current;
     if (th) arr = arr.filter(function (q) { return q._th === th && (!ch || q._ch === ch); });
     var suffix = mode === "mastered" ? "?view=mastered" : "";
+    var lastWrong = mode === "current" ? wrongResumeInfo() : null;
+    var lastWrongCard = lastWrong
+      ? '<div class="card wrong-resume"><div><strong>' + esc(t("home.continue")) +
+        '</strong><p class="muted">' + esc(t("quiz.of", { i: lastWrong.i, n: lastWrong.n })) +
+        ' · ' + esc(lastWrong.id) + '</p></div>' +
+        '<a class="btn primary" href="' + esc(lastWrong.href) +
+        '" data-act="resume-last">' + ic("right") + esc(t("nav.resume")) + '</a></div>'
+      : "";
     var head = '<section class="page-h"><span class="eyebrow">' + ic("alert") + esc(t("wrong.title")) + '</span><h1>' + esc(t("wrong.title")) + '</h1><p class="lede">' + esc(t(mode === "mastered" ? "wrong.masteredSub" : "wrong.sub")) + '</p>' +
       '<div class="seg" role="group" aria-label="' + esc(t("wrong.title")) + '">' +
         '<a class="seg-btn' + (mode === "current" ? " on" : "") + '" href="#/wrong">' + esc(t("wrong.currentTab", { n: current.length })) + '</a>' +
@@ -1690,10 +1712,10 @@
       INDEX.themes.filter(function (T) { return arr.some(function (q) { return q._th === T.th; }); }).map(function (T) {
         return '<a class="chip' + (th === T.th ? " on" : "") + '" href="#/wrong/' + encodeURIComponent(T.th) + suffix + '">' + esc(T.thz || trName(T.thd, T.the, zhTheme(T.th))) + '</a>';
       }).join("") + '</div>';
-    if (!arr.length) return head + '<div class="empty card"><h2>' + esc(t(mode === "mastered" ? "wrong.masteredEmpty" : "wrong.empty")) + '</h2>' +
+    if (!arr.length) return head + lastWrongCard + '<div class="empty card"><h2>' + esc(t(mode === "mastered" ? "wrong.masteredEmpty" : "wrong.empty")) + '</h2>' +
       (mode === "mastered" ? "" : '<a class="btn primary" href="#/categories">' + esc(t("wrong.emptyAction")) + '</a>') + '</div></section>';
     var practiceHref = '#/practice?ids=' + encodeURIComponent(arr.map(function (q) { return q.id; }).join(",")) + '&src=wrong';
-    return head +
+    return head + lastWrongCard +
       '<div class="hero-cta"><a class="btn primary" href="' + practiceHref + '">' + ic("refresh") + esc(t("wrong.retryAll")) + '</a><span class="muted">' + esc(t("wrong.count", { n: arr.length })) + '</span></div>' +
       '<div class="wrong-list">' + arr.map(function (q) {
         var st = state.q[q.id];
@@ -1743,7 +1765,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v109 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v110 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
