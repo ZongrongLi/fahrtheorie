@@ -277,9 +277,11 @@ html[dir="rtl"] .bubble.md,html[dir="rtl"] .md{text-align:right;}
 .feedback{margin-top:20px;border-radius:var(--r);padding:16px 18px;border:1px solid var(--line);}
 .feedback.ok{background:var(--ok-bg);border-color:color-mix(in srgb,var(--ok) 35%,transparent);}
 .feedback.no{background:var(--bad-bg);border-color:color-mix(in srgb,var(--bad) 35%,transparent);}
+.feedback.revealed{background:var(--surface-2);border-color:var(--line);}
 .fb-head{display:flex;align-items:center;gap:9px;font-family:var(--disp);font-weight:700;font-size:17px;}
 .feedback.ok .fb-head{color:var(--ok);}
 .feedback.no .fb-head{color:var(--bad);}
+.feedback.revealed .fb-head{color:var(--accent);}
 .fb-row{display:flex;gap:10px;margin-top:9px;font-size:13.5px;}
 .fb-row span{color:var(--muted);}
 .fb-row b{font-family:var(--mono);}

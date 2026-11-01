@@ -15,7 +15,11 @@ const instrumented = appSource.replace(marker,
   '    status: progStatusText, sync: function () { return progSync; },\n' +
   '    saveState: saveState,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
-  '    getPrefs: function () { return prefs; } };\n' + marker);
+  '    getPrefs: function () { return prefs; } };\n' +
+  '  window.testWrong = { recordAnswer: recordAnswer, revealAnswer: revealAnswer, grade: grade,\n' +
+  '    gradeExam: gradeExam, toggleWrong: toggleWrong,\n' +
+  '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
+  '    getSession: function () { return session; }, setSession: function (s) { session = s; } };\n' + marker);
 
 function stubNode() {
   return {
@@ -432,4 +436,55 @@ test('login and progress hooks are wired in the app source', () => {
   assert.match(appSource, /progPull\(\);/, 'finishLogin must pull cloud progress');
   assert.match(appSource, /progPush\(\);/, 'saveState must schedule a push');
   assert.match(appSource, /progWipe = true; saveState\(\);/, 'reset/import must wipe the cloud copy');
+});
+
+test('a correct practice answer clears the wrong-book flag and keeps its history', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  const q = { id: '1.1.01-001', t: 'single', ans: [0], num: null };
+  W.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  W.recordAnswer(q, false);
+  assert.equal(W.getState().q[q.id].wrong, true, 'a wrong answer enters the wrong book');
+  assert.equal(W.getState().q[q.id].w, 1);
+  W.grade(q, { sel: [0], val: '', submitted: false, correct: false });
+  assert.equal(W.getState().q[q.id].wrong, false, 'a later correct answer removes it');
+  assert.equal(W.getState().q[q.id].w, 1, 'the previous mistake count remains available');
+  assert.equal(W.getState().q[q.id].r, 1, 'the correct answer is recorded');
+});
+
+test('revealing an answer does not count as an answer or enter the wrong book', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  const a = { sel: [], val: '', submitted: false, correct: false };
+  assert.equal(W.revealAnswer(a), true);
+  assert.equal(a.submitted, true);
+  assert.equal(a.revealed, true);
+  assert.deepEqual(W.getState().q, {}, 'revealing creates no answer state');
+  assert.deepEqual(W.getState().days, {}, 'revealing creates no daily activity');
+});
+
+test('a question cleared by a correct answer can be manually added back', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  const q = { id: '1.1.01-001', t: 'single', ans: [0], num: null };
+  W.setState({ q: { [q.id]: { a: 2, w: 1, r: 1, last: true, wrong: false, at: 1 } },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  assert.equal(W.toggleWrong(q.id), true);
+  assert.equal(W.getState().q[q.id].wrong, true, 'the manual wrong-book control adds it again');
+});
+
+test('a correct mock-exam answer also clears an existing wrong-book flag', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({ q: { '1.1.01-001': { a: 1, w: 1, r: 0, last: false, wrong: true, at: 1 } },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  W.setSession({
+    ids: ['1.1.01-001'], i: 0, mode: 'exam',
+    answers: { '1.1.01-001': { sel: [0], val: '', submitted: false, correct: false } },
+    graded: false,
+  });
+  W.gradeExam();
+  assert.equal(W.getState().q['1.1.01-001'].wrong, false, 'exam grading uses the shared answer rule');
+  assert.equal(W.getState().q['1.1.01-001'].r, 1);
 });

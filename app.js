@@ -598,6 +598,34 @@
     return out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>");
   }
   function qState(id) { return state.q[id] || (state.q[id] = { a: 0, w: 0, r: 0, last: null, wrong: false, at: 0 }); }
+  function recordAnswer(q, ok) {
+    var st = qState(q.id);
+    st.a = (st.a | 0) + 1;
+    st.at = Date.now();
+    st.last = !!ok;
+    if (ok) {
+      st.r = (st.r | 0) + 1;
+      st.wrong = false;
+    } else {
+      st.w = (st.w | 0) + 1;
+      st.wrong = true;
+    }
+    return st;
+  }
+  function revealAnswer(a) {
+    if (!a || a.submitted) return false;
+    a.submitted = true;
+    a.revealed = true;
+    a.correct = false;
+    return true;
+  }
+  function toggleWrong(id) {
+    var st = qState(id);
+    st.wrong = !st.wrong;
+    st.at = Date.now();
+    saveState();
+    return st.wrong;
+  }
   function wrongCount() { return CAT.filter(function (q) { return state.q[q.id] && state.q[q.id].wrong; }).length; }
   function answeredCount() { return CAT.filter(function (q) { return state.q[q.id] && state.q[q.id].a > 0; }).length; }
   function notesCount() { var n = 0; for (var k in state.notes) if (state.notes[k] && state.notes[k].text) n++; return n; }
@@ -1135,7 +1163,7 @@
       opts = '<ul class="opts' + (q.t === "multi" ? " multi" : "") + '">' + qOrder(q).map(function (i, p) {
         var on = a.sel.indexOf(i) >= 0;
         var cls = "opt" + (on ? " on" : "");
-        if (a.submitted) { if (q.ans.indexOf(i) >= 0) cls += " right"; else if (on) cls += " bad"; }
+        if (a.submitted) { if (q.ans.indexOf(i) >= 0) cls += " right"; else if (on && !a.revealed) cls += " bad"; }
         return '<li class="' + cls + '" data-act="opt" data-i="' + i + '" role="button" tabindex="0" aria-pressed="' + on + '">' +
           '<span class="box" aria-hidden="true">' + (q.t === "multi" ? ic("check") : "") + '</span>' +
           '<span class="opt-body">' + optBody(q, i) + '</span>' +
@@ -1162,6 +1190,14 @@
     var ok = a.correct;
     var your = q.t === "num" ? (a.val || "—") : (a.sel.length ? a.sel.slice().sort(function (x, y) { return orderPos(q, x) - orderPos(q, y); }).map(function (i) { return orderLetter(q, i); }).join(", ") : "—");
     var right = q.t === "num" ? (q.num == null ? "—" : q.num) : q.ans.slice().sort(function (x, y) { return orderPos(q, x) - orderPos(q, y); }).map(function (i) { return orderLetter(q, i); }).join(", ");
+    if (a.revealed) {
+      return '<div class="feedback revealed" role="status">' +
+        '<div class="fb-head">' + esc(t("quiz.correctAnswer")) + '</div>' +
+        '<div class="fb-row"><b class="good">' + esc(right) + '</b></div>' +
+        '<div class="fb-exp"><h4>' + esc(t("quiz.explanation")) + '</h4>' + explSwitch(q) + explainHTML(q) + "</div>" +
+        (q.u ? '<a class="src" href="' + esc(q.u) + '" target="_blank" rel="noopener noreferrer">' + ic("link") + esc(t("quiz.source")) + '</a>' : "") +
+        '</div>';
+    }
     return '<div class="feedback ' + (ok ? "ok" : "no") + '" role="status">' +
       '<div class="fb-head">' + (ok ? ic("check") + esc(t("quiz.correct")) : ic("x") + esc(t("quiz.wrong"))) + '</div>' +
       '<div class="fb-row"><span>' + esc(t("quiz.yourAnswer")) + '</span><b>' + esc(your) + '</b></div>' +
@@ -1495,7 +1531,7 @@
   function revealCurrent() {
     var q = BY[session.ids[session.i]]; var a = session.answers[q.id];
     if (!q || !a || a.submitted) return;
-    grade(q, a);
+    revealAnswer(a);
     rerenderQuiz();
   }
   function grade(q, a) {
@@ -1504,10 +1540,7 @@
     if (q.t === "num") ok = String(a.val).trim() === String(q.num).trim();
     else ok = a.sel.length === q.ans.length && a.sel.every(function (i) { return q.ans.indexOf(i) >= 0; });
     a.correct = ok;
-    var st = qState(q.id);
-    st.a++; st.at = Date.now(); st.last = ok;
-    if (ok) { st.r++; if (st.wrong) { st.wrong = false; } }
-    else { st.w++; st.wrong = true; }
+    recordAnswer(q, ok);
     state.days[today()] = (state.days[today()] || 0) + 1;
     saveState();
   }
@@ -1561,7 +1594,7 @@
       var q = BY[id], a = session.answers[id]; total += q.pt;
       var ok = a && (q.t === "num" ? String(a.val).trim() === String(q.num).trim() : (a.sel.length === q.ans.length && a.sel.every(function (i) { return q.ans.indexOf(i) >= 0; })));
       if (!ok) { err += q.pt; }
-      if (a && (a.sel.length || a.val !== "")) { var st = qState(id); st.a++; st.at = Date.now(); st.last = !!ok; if (ok) st.r++; else { st.w++; st.wrong = true; } }
+      if (a && (a.sel.length || a.val !== "")) recordAnswer(q, !!ok);
     });
     session.err = err; session.total = total; saveState();
   }
@@ -1633,7 +1666,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v102 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v103 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2215,9 +2248,9 @@
     if (act === "restart") { var p = session._p || {}; session = null; go("#/practice?c=" + encodeURIComponent(p.c || "ALL") + "&m=" + (p.m || "all") + "&s=rnd"); return; }
     if (act === "wrong-add") {
       var wq = currentQ(); if (!wq) return;
-      var ws = qState(wq.id); ws.wrong = !ws.wrong; ws.at = Date.now(); saveState();
+      var added = toggleWrong(wq.id);
       rerenderQuiz();
-      toast(ws.wrong ? t("quiz.addedWrong") : t("quiz.removedWrong"));
+      toast(added ? t("quiz.addedWrong") : t("quiz.removedWrong"));
       return;
     }
     if (act === "bm") { var q = currentQ(); var st = qState(q.id); st.bm = !st.bm; st.at = Date.now(); saveState(); rerenderQuiz(); toast(st.bm ? t("quiz.bookmarked") : t("quiz.unbookmarked")); return; }
