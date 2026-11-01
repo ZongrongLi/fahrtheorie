@@ -6,6 +6,7 @@ window.I18N = {
     "app.name": "German Theory Trainer",
     "app.sub": "Führerschein Theorieprüfung",
     "nav.home": "Home",
+    "nav.resume": "Resume",
     "nav.categories": "Categories",
     "nav.wrong": "Mistakes",
     "nav.notes": "Notes",

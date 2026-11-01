@@ -598,6 +598,14 @@ test('home continue resumes inside the question category, not ALL', () => {
     'continue must no longer jump into the global list');
 });
 
+test('resume is present in both desktop and mobile global navigation', () => {
+  const html = fs.readFileSync(require.resolve('../index.html'), 'utf8');
+  assert.match(html, /class="rail"[\s\S]*?data-act="resume-last"/,
+    'desktop rail must expose resume');
+  assert.match(html, /class="tabbar"[\s\S]*?data-act="resume-last"/,
+    'mobile tab bar must expose resume even when the rail is hidden');
+});
+
 test('admin view embeds user management against the worker API', () => {
   assert.ok(appSource.includes('function admCard()'), 'admin must render a user-management card');
   assert.ok(appSource.includes('"/api/admin/users"'), 'admin must list users from the worker');

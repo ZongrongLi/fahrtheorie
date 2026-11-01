@@ -67,7 +67,7 @@ main{min-width:0;padding:26px 30px 90px;max-width:1120px;}
   .app-shell{grid-template-columns:1fr;}
   .rail{display:none;}
   main{padding:18px 15px 96px;}
-  .tabbar{display:grid;grid-template-columns:repeat(6,1fr);position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);z-index:50;padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
+  .tabbar{display:grid;grid-template-columns:repeat(7,1fr);position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);z-index:50;padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
   .tabbar a{display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px;font-size:10.5px;font-weight:600;color:var(--muted);}
   .tabbar a .ic{width:21px;height:21px;}
   .tabbar a.is-active{color:var(--accent);}
