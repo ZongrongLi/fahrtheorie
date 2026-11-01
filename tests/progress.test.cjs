@@ -538,3 +538,22 @@ test('home continue prefers the last opened question in this browser', () => {
   const home = W.homeView();
   assert.match(home, /at=1\.1\.01-001/, 'a merely opened question is remembered too');
 });
+
+test('home continue restores the exact saved practice set and source', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({
+    q: {
+      '1.1.01-001': { a: 1, w: 1, r: 0, last: false, wrong: true, at: 100 },
+      '1.1.01-002': { a: 1, w: 1, r: 0, last: false, wrong: true, at: 200 },
+    },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  const saved = '#/practice?ids=1.1.01-002%2C1.1.01-001&src=wrong&at=1.1.01-001';
+  P.store['dtt.resume.v1'] = JSON.stringify({ id: '1.1.01-001', hash: saved, at: 300 });
+  const home = W.homeView();
+  assert.match(home, /ids=1\.1\.01-002%2C1\.1\.01-001/,
+    'resume keeps the original practice set instead of rebuilding a category session');
+  assert.match(home, /src=wrong/, 'resume keeps the original wrong-book source');
+  assert.match(home, /at=1\.1\.01-001/, 'resume lands on the exact saved question');
+});

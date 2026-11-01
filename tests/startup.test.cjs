@@ -590,8 +590,10 @@ test('switching quiz language drops the manual override', () => {
 test('home continue resumes inside the question category, not ALL', () => {
   assert.ok(appSource.includes('var contC = (contQ && contQ._th) || "ALL";'),
     'continue must resolve the category of the resume question');
-  assert.ok(appSource.includes("\"#/practice?c=' + encodeURIComponent(contC) + '&m=all&s=seq&at='"),
-    'continue must open a category-scoped session so the header shows category progress');
+  assert.ok(appSource.includes('var contHref = resumeHref(contId, contC);'),
+    'continue must build its fallback from the resume question category');
+  assert.ok(appSource.includes('return "#/practice?c=" + encodeURIComponent(contC) + "&m=all&s=seq&at=" + encodeURIComponent(contId);'),
+    'without a saved session, continue must still open a category-scoped session');
   assert.equal(appSource.includes('encodeURIComponent(contId) + "&src=all"'), false,
     'continue must no longer jump into the global list');
 });

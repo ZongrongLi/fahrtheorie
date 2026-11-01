@@ -616,6 +616,19 @@
     var nextId = nextUnseen();
     return last || (nextId && BY[nextId]) || CAT[0];
   }
+  function resumeHref(contId, contC) {
+    var saved = load(RESUME_KEY, {});
+    var hash = saved && String(saved.hash || "");
+    if (saved && saved.id && BY[saved.id] && /^#\/practice\?/.test(hash) &&
+        hash.indexOf("at=" + encodeURIComponent(saved.id)) >= 0) return hash;
+    return "#/practice?c=" + encodeURIComponent(contC) + "&m=all&s=seq&at=" + encodeURIComponent(contId);
+  }
+  function paintResumeLink() {
+    var contQ = resumeQuestion() || CAT[0];
+    if (!contQ) return;
+    var href = resumeHref(contQ.id, contQ._th || "ALL");
+    document.querySelectorAll('[data-act="resume-last"]').forEach(function (el) { el.setAttribute("href", href); });
+  }
   function recordAnswer(q, ok) {
     var st = qState(q.id);
     st.a = (st.a | 0) + 1;
@@ -704,6 +717,7 @@
     document.querySelectorAll("[data-nav]").forEach(function (el) {
       el.classList.toggle("is-active", el.getAttribute("data-nav") === activeNav);
     });
+    paintResumeLink();
     if (["home", "categories", "cat", "wrong", "notes", "settings", "admin"].indexOf(view) >= 0) { session = null; lastHash = location.hash || "#/home"; }
     mountMedia();
     window.scrollTo(0, 0);
@@ -721,6 +735,7 @@
     var contQ = resumeQuestion() || CAT[0];
     var contId = contQ.id;
     var contC = (contQ && contQ._th) || "ALL";
+    var contHref = resumeHref(contId, contC);
     return '' +
       '<section class="hero">' +
         '<div class="hero-main">' +
@@ -728,7 +743,7 @@
           '<h1>' + esc(t("home.greeting")) + '</h1>' +
           '<p class="lede">' + esc(t("home.lede", { n: total, img: withImg })) + '</p>' +
           '<div class="hero-cta">' +
-            '<a class="btn primary" href="#/practice?c=' + encodeURIComponent(contC) + '&m=all&s=seq&at=' + encodeURIComponent(contId) + '">' + ic("right") + esc(t("home.continue")) + '</a>' +
+            '<a class="btn primary" href="' + esc(contHref) + '">' + ic("right") + esc(t("home.continue")) + '</a>' +
             '<button class="btn ghost" data-act="random">' + ic("refresh") + esc(t("home.random")) + '</button>' +
             '<a class="btn ghost" href="#/exam">' + ic("clock") + esc(t("home.exam")) + '</a>' +
             '<a class="btn ghost" href="#/wrong">' + ic("alert") + esc(t("nav.wrong")) + (wr ? ' (' + wr + ')' : '') + '</a>' +
@@ -911,7 +926,7 @@
       if (!seen) out.push("at=" + encodeURIComponent(id));
       var nh = base + "?" + out.join("&");
       if (nh !== h) { try { history.replaceState(null, "", location.pathname + nh); } catch (e2) {} }
-      try { localStorage.setItem(RESUME_KEY, JSON.stringify({ id: id, at: Date.now() })); } catch (e3) {}
+      try { localStorage.setItem(RESUME_KEY, JSON.stringify({ id: id, hash: nh, at: Date.now() })); } catch (e3) {}
       session.key = nh.replace(/^#\/?/, "");
     } catch (e) {}
   }
@@ -1705,7 +1720,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v105 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v106 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
