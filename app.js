@@ -1726,7 +1726,7 @@
         '</strong><p class="muted">' + esc(t("quiz.of", { i: lastWrong.i, n: lastWrong.n })) +
         ' · ' + esc(lastWrong.id) + '</p></div>' +
         '<a class="btn primary" href="' + esc(lastWrong.href) +
-        '" data-act="resume-last">' + ic("right") + esc(t("nav.resume")) + '</a></div>'
+        '" data-act="resume-wrong">' + ic("right") + esc(t("nav.resume")) + '</a></div>'
       : "";
     var head = '<section class="page-h"><span class="eyebrow">' + ic("alert") + esc(t("wrong.title")) + '</span><h1>' + esc(t("wrong.title")) + '</h1><p class="lede">' + esc(t(mode === "mastered" ? "wrong.masteredSub" : "wrong.sub")) + '</p>' +
       '<div class="seg" role="group" aria-label="' + esc(t("wrong.title")) + '">' +
@@ -1790,7 +1790,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v111 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v112 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2365,6 +2365,12 @@
       e.preventDefault();
       var rq = resumeQuestion() || CAT[0];
       if (rq) go(resumeHref(rq.id, rq._th || "ALL"));
+      return;
+    }
+    if (act === "resume-wrong") {
+      e.preventDefault();
+      var rw = progResumeWrongLocal();
+      if (rw) go(rw.hash);
       return;
     }
     if (act === "exit") {

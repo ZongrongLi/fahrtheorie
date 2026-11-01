@@ -662,6 +662,7 @@ test('wrong book shows the exact saved wrong-session position', () => {
   const wrong = W.wrongView('', '', '');
   assert.match(wrong, /class="card wrong-resume"/, 'the wrong book exposes an in-page resume card');
   assert.match(wrong, /Question 2 \/ 2/, 'the card shows the saved position in the wrong session');
-  assert.match(wrong, /data-act="resume-last"/, 'the card is a resume action');
+  assert.match(wrong, /data-act="resume-wrong"/, 'the card uses its own wrong-book action');
+  assert.doesNotMatch(wrong, /data-act="resume-last"/, 'the global resume action must not overwrite the card href');
   assert.match(wrong, /at=1\.1\.01-002/, 'the card keeps the exact saved question');
 });
