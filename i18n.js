@@ -14,7 +14,7 @@ window.I18N = {
     "home.eyebrow": "2026 · Official question bank",
     "home.greeting": "Keep the streak going",
     "home.lede": "The official TÜV/DEKRA theory bank — {n} questions, {img} with figures. Every answer and explanation is taken from the official catalogue — nothing is guessed.",
-    "home.continue": "Continue practising",
+    "home.continue": "Continue last session",
     "home.random": "Random practice",
     "home.exam": "Mock exam (30 random questions)",
     "home.overall": "Overall progress",

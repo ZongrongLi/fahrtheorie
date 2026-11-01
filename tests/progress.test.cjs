@@ -18,6 +18,7 @@ const instrumented = appSource.replace(marker,
   '    getPrefs: function () { return prefs; } };\n' +
   '  window.testWrong = { recordAnswer: recordAnswer, revealAnswer: revealAnswer, grade: grade,\n' +
   '    gradeExam: gradeExam, toggleWrong: toggleWrong, wrongView: vWrong,\n' +
+  '    homeView: vHome, resumeQuestion: resumeQuestion, lastAnswered: lastAnswered,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
   '    getSession: function () { return session; }, setSession: function (s) { session = s; } };\n' + marker);
 
@@ -506,4 +507,34 @@ test('the wrong book exposes mastered mistakes separately and allows adding them
   assert.match(mastered, /Q2/, 'the mastered tab shows answered mistakes');
   assert.doesNotMatch(mastered, /Q1/, 'the mastered tab hides active mistakes');
   assert.match(mastered, /data-act="wrong-relearn"/, 'mastered mistakes can be added back');
+});
+
+test('home continue opens the last answered question instead of the next unseen one', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({
+    q: {
+      '1.1.01-001': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 100 },
+      '1.1.01-002': { a: 1, w: 1, r: 0, last: false, wrong: true, at: 200 },
+    },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  const home = W.homeView();
+  assert.match(home, /at=1\.1\.01-002/, 'the primary button resumes the latest answered question');
+  assert.match(home, /c=1\.1/, 'resume stays scoped to that question category');
+});
+
+test('home continue prefers the last opened question in this browser', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({
+    q: {
+      '1.1.01-001': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 100 },
+      '1.1.01-002': { a: 1, w: 0, r: 1, last: true, wrong: false, at: 200 },
+    },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  P.store['dtt.resume.v1'] = JSON.stringify({ id: '1.1.01-001', at: 300 });
+  const home = W.homeView();
+  assert.match(home, /at=1\.1\.01-001/, 'a merely opened question is remembered too');
 });

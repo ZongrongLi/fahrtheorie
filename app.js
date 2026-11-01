@@ -599,6 +599,23 @@
     return out.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/\*([^*]+)\*/g, "<em>$1</em>");
   }
   function qState(id) { return state.q[id] || (state.q[id] = { a: 0, w: 0, r: 0, last: null, wrong: false, at: 0 }); }
+  var RESUME_KEY = "dtt.resume.v1";
+  function lastAnswered() {
+    var best = null, bestAt = -1;
+    CAT.forEach(function (q) {
+      var st = state.q[q.id];
+      var at = st && (st.a | 0) > 0 ? (Number(st.at) || 0) : 0;
+      if (at > 0 && at > bestAt) { best = q; bestAt = at; }
+    });
+    return best;
+  }
+  function resumeQuestion() {
+    var saved = load(RESUME_KEY, {});
+    if (saved && saved.id && BY[saved.id]) return BY[saved.id];
+    var last = lastAnswered();
+    var nextId = nextUnseen();
+    return last || (nextId && BY[nextId]) || CAT[0];
+  }
   function recordAnswer(q, ok) {
     var st = qState(q.id);
     st.a = (st.a | 0) + 1;
@@ -701,8 +718,8 @@
     var streak = computeStreak();
     var goalDone = state.days[today()] || 0;
     var goalPct = Math.min(100, Math.round(goalDone / state.goal * 100));
-    var contId = nextUnseen() || CAT[0].id;
-    var contQ = BY[contId] || CAT[0];
+    var contQ = resumeQuestion() || CAT[0];
+    var contId = contQ.id;
     var contC = (contQ && contQ._th) || "ALL";
     return '' +
       '<section class="hero">' +
@@ -894,6 +911,7 @@
       if (!seen) out.push("at=" + encodeURIComponent(id));
       var nh = base + "?" + out.join("&");
       if (nh !== h) { try { history.replaceState(null, "", location.pathname + nh); } catch (e2) {} }
+      try { localStorage.setItem(RESUME_KEY, JSON.stringify({ id: id, at: Date.now() })); } catch (e3) {}
       session.key = nh.replace(/^#\/?/, "");
     } catch (e) {}
   }
@@ -1687,7 +1705,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v104 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v105 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
