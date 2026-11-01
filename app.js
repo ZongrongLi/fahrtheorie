@@ -64,6 +64,7 @@
   }
   var state = load("dtt.state.v1", { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
   var RESUME_KEY = "dtt.resume.v1", RESUME_WRONG_KEY = "dtt.resume.wrong.v1";
+  var RESUME_WRONG_GROUPS_KEY = "dtt.resume.wrong.groups.v1";
   var prefs = load("dtt.prefs", { uiLang: "en", contentLang: "en", theme: "light", explLang: "en", scope: "b", donateLink: "", donateQR: "", buyUrl: "", lic: "", licBase: "", uid: "", user: "", freeLeft: 10, apiBase: "", token: "", serverLeft: null, googleClientId: "", unlimited: false });
   if (["zhen", "zh", "en", "de"].indexOf(prefs.contentLang) < 0) prefs.contentLang = "en";
   if (["zh", "en", "de"].indexOf(prefs.explLang) < 0) prefs.explLang = "en";
@@ -102,9 +103,31 @@
     return { id: id, hash: hash, at: at };
   }
   function progWrongHash(hash) { return /(?:[?&])src=wrong(?:&|$)/.test(String(hash || "")); }
+  function progWrongGroup(hash) {
+    var m = /(?:[?&])wc=(\d+)(?:&|$)/.exec(String(hash || ""));
+    if (!m) return null;
+    var n = Number(m[1]);
+    return Number.isFinite(n) && n >= 0 && n <= 1000000 ? String(Math.floor(n)) : null;
+  }
   function progResumeWrongValue(v) {
     var r = progResumeValue(v);
     return r && progWrongHash(r.hash) ? r : null;
+  }
+  function progResumeWrongGroupValue(v, key) {
+    var r = progResumeWrongValue(v);
+    return r && progWrongGroup(r.hash) === String(key) ? r : null;
+  }
+  function progResumeWrongGroupsLocal() {
+    var raw = load(RESUME_WRONG_GROUPS_KEY, {}), out = {}, k, r;
+    for (k in raw) {
+      if (!/^\d+$/.test(k)) continue;
+      r = progResumeWrongGroupValue(raw[k], k);
+      if (r) out[k] = r;
+    }
+    return out;
+  }
+  function progResumeWrongGroupLocal(key) {
+    return progResumeWrongGroupsLocal()[String(key)] || null;
   }
   function progResumeLocal() { return progResumeValue(load(RESUME_KEY, {})); }
   function progResumeWrongLocal() { return progResumeWrongValue(load(RESUME_WRONG_KEY, {})); }
@@ -158,8 +181,11 @@
     var out = { q: q, notes: progFitNotes(notes), days: days, goal: state.goal | 0 || 20 };
     var resume = progResumeLocal();
     if (resume) out.resume = resume;
-    var wrongResume = progResumeWrongLocal() || (progWrongHash(resume && resume.hash) ? resume : null);
+    var wrongResume = progResumeWrongLocal() ||
+      (progWrongHash(resume && resume.hash) && !progWrongGroup(resume.hash) ? resume : null);
     if (wrongResume) out.resumeWrong = wrongResume;
+    var wrongGroups = progResumeWrongGroupsLocal();
+    if (Object.keys(wrongGroups).length) out.resumeWrongGroups = wrongGroups;
     return out;
   }
   function progBytes(obj) {
@@ -175,6 +201,11 @@
     var out = { q: q, notes: notes, days: days, goal: full.goal, savedAt: full.savedAt };
     if (progResumeNewer(full.resume, progAcked.resume)) out.resume = full.resume;
     if (progResumeNewer(full.resumeWrong, progAcked.resumeWrong)) out.resumeWrong = full.resumeWrong;
+    var changedGroups = {}, groups = full.resumeWrongGroups || {}, ackedGroups = progAcked.resumeWrongGroups || {};
+    for (k in groups) {
+      if (JSON.stringify(groups[k]) !== JSON.stringify(ackedGroups[k])) changedGroups[k] = groups[k];
+    }
+    if (Object.keys(changedGroups).length) out.resumeWrongGroups = changedGroups;
     return out;
   }
   function progAckOk(sent, got) {
@@ -192,6 +223,11 @@
     if (sent.resumeWrong) {
       var gw = progResumeWrongValue(got.resumeWrong);
       if (!gw || gw.at < sent.resumeWrong.at || (gw.at === sent.resumeWrong.at && gw.id !== sent.resumeWrong.id)) return false;
+    }
+    for (k in (sent.resumeWrongGroups || {})) {
+      var sg = sent.resumeWrongGroups[k];
+      var gg = progResumeWrongGroupValue((got.resumeWrongGroups || {})[k], k);
+      if (!gg || gg.at < sg.at || (gg.at === sg.at && gg.id !== sg.id)) return false;
     }
     return true;
   }
@@ -227,10 +263,22 @@
     if (remoteResume && (!localResume || remoteResume.at >= localResume.at)) {
       try { localStorage.setItem(RESUME_KEY, JSON.stringify(remoteResume)); } catch (e) {}
     }
-    var remoteWrongResume = progResumeWrongValue(srv.resumeWrong) || progResumeWrongValue(srv.resume);
+    var remoteWrongResume = progResumeWrongValue(srv.resumeWrong) ||
+      (progWrongHash(srv.resume && srv.resume.hash) && !progWrongGroup(srv.resume.hash) ? progResumeWrongValue(srv.resume) : null);
     var localWrongResume = progResumeWrongLocal();
     if (remoteWrongResume && (!localWrongResume || remoteWrongResume.at >= localWrongResume.at)) {
       try { localStorage.setItem(RESUME_WRONG_KEY, JSON.stringify(remoteWrongResume)); } catch (e2) {}
+    }
+    var remoteGroups = srv.resumeWrongGroups || {}, localGroups = progResumeWrongGroupsLocal(), groupChanged = false;
+    for (k in remoteGroups) {
+      var rg = progResumeWrongGroupValue(remoteGroups[k], k);
+      if (rg && (!localGroups[k] || rg.at >= localGroups[k].at)) {
+        localGroups[k] = rg;
+        groupChanged = true;
+      }
+    }
+    if (groupChanged) {
+      try { localStorage.setItem(RESUME_WRONG_GROUPS_KEY, JSON.stringify(localGroups)); } catch (e3) {}
     }
     /* The acknowledgement describes the cloud snapshot, not this merged local state.
        Remember the server entries so pagehide can upload only what changed. */
@@ -244,7 +292,7 @@
     if (sig === progPushedSig && !progWipe) { progSync.state = "ok"; progPaintStatus(); return; }
     var p = (progAcked && !progWipe) ? progDelta(full) : full;
     if (flush && !progWipe && !Object.keys(p.q).length && !Object.keys(p.notes).length &&
-        !Object.keys(p.days).length && !p.resume && !p.resumeWrong &&
+        !Object.keys(p.days).length && !p.resume && !p.resumeWrong && !Object.keys(p.resumeWrongGroups || {}).length &&
         p.goal === ((progAcked && progAcked.goal) || 20)) {
       progPushedSig = sig; progSync.state = "ok"; progPaintStatus(); return;
     }
@@ -673,8 +721,10 @@
     var href = resumeHref(contQ.id, contQ._th || "ALL");
     document.querySelectorAll('[data-act="resume-last"]').forEach(function (el) { el.setAttribute("href", href); });
   }
-  function wrongResumeInfo() {
-    var r = progResumeWrongLocal();
+  function wrongResumeInfo(w) {
+    var r = w === "" || w === null || typeof w === "undefined"
+      ? progResumeWrongLocal()
+      : progResumeWrongGroupLocal(w);
     if (!r) return null;
     var query = r.hash.slice(r.hash.indexOf("?") + 1), ids = "";
     query.split("&").forEach(function (kv) {
@@ -765,7 +815,7 @@
     else if (view === "categories") app.innerHTML = vCategories();
     else if (view === "cat") app.innerHTML = vCat(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""));
     else if (view === "practice") { if (!session || session.key !== key) startFromRoute(query, key); app.innerHTML = vQuiz(); }
-    else if (view === "wrong") app.innerHTML = vWrong(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""), queryArgs.view || "");
+    else if (view === "wrong") app.innerHTML = vWrong(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""), queryArgs.view || "", queryArgs.w || "");
     else if (view === "notes") app.innerHTML = vNotes();
     else if (view === "exam") app.innerHTML = session && session.mode === "exam" ? vExam() : vExamHome();
     else if (view === "settings") app.innerHTML = vSettings();
@@ -932,7 +982,7 @@
   /* ---------------- practice session ---------------- */
   function startFromRoute(q, key) {
     var p = {};
-    (q || "").split("&").forEach(function (kv) { if (!kv) return; var a = kv.split("="); var k = a[0], v = a.slice(1).join("="); if (k === "c") p.c = decodeURIComponent(v || ""); else if (k === "ch") p.ch = decodeURIComponent(v || ""); else if (k === "m") p.m = v; else if (k === "s") p.s = v; else if (k === "ids") p.ids = decodeURIComponent(v || ""); else if (k === "q") p.q = decodeURIComponent(v || ""); else if (k === "at") p.at = decodeURIComponent(v || ""); else if (k === "nav") p.nav = v; else if (k === "src") p.src = v; });
+    (q || "").split("&").forEach(function (kv) { if (!kv) return; var a = kv.split("="); var k = a[0], v = a.slice(1).join("="); if (k === "c") p.c = decodeURIComponent(v || ""); else if (k === "ch") p.ch = decodeURIComponent(v || ""); else if (k === "m") p.m = v; else if (k === "s") p.s = v; else if (k === "ids") p.ids = decodeURIComponent(v || ""); else if (k === "q") p.q = decodeURIComponent(v || ""); else if (k === "at") p.at = decodeURIComponent(v || ""); else if (k === "nav") p.nav = v; else if (k === "src") p.src = v; else if (k === "wc") p.wc = v; });
     var ids;
     if (p.ids) ids = p.ids.split(",").filter(Boolean);
     else if (p.q) ids = [p.q];
@@ -986,7 +1036,16 @@
       if (nh !== h) { try { history.replaceState(null, "", location.pathname + nh); } catch (e2) {} }
       try {
         localStorage.setItem(RESUME_KEY, JSON.stringify(resume));
-        if (progWrongHash(nh)) localStorage.setItem(RESUME_WRONG_KEY, JSON.stringify(resume));
+        if (progWrongHash(nh)) {
+          var wc = progWrongGroup(nh);
+          if (wc) {
+            var groups = progResumeWrongGroupsLocal();
+            groups[wc] = resume;
+            localStorage.setItem(RESUME_WRONG_GROUPS_KEY, JSON.stringify(groups));
+          } else {
+            localStorage.setItem(RESUME_WRONG_KEY, JSON.stringify(resume));
+          }
+        }
       } catch (e3) {}
       session.key = nh.replace(/^#\/?/, "");
       progPush();
@@ -1710,36 +1769,62 @@
   }
 
   /* ---------------- wrong book ---------------- */
-  function vWrong(th, ch, view) {
+  function vWrong(th, ch, view, w) {
     var mode = view === "mastered" ? "mastered" : "current";
     var current = CAT.filter(function (q) { return state.q[q.id] && state.q[q.id].wrong; });
     var mastered = CAT.filter(function (q) {
       var st = state.q[q.id];
       return st && (st.w | 0) > 0 && !st.wrong;
     });
+    var countFilter = mode === "current" && /^\d+$/.test(String(w || "")) ? String(Number(w)) : "";
     var arr = mode === "mastered" ? mastered : current;
+    if (countFilter) arr = arr.filter(function (q) {
+      return String(Number((state.q[q.id] && state.q[q.id].w) || 0)) === countFilter;
+    });
+    var counts = {}, countKeys;
+    current.forEach(function (q) {
+      var n = String(Number((state.q[q.id] && state.q[q.id].w) || 0));
+      counts[n] = (counts[n] || 0) + 1;
+    });
+    countKeys = Object.keys(counts).sort(function (a, b) { return Number(a) - Number(b); });
+    function wrongHref(nextMode, nextTh, nextCh, nextW) {
+      var base = "#/wrong";
+      if (nextTh) base += "/" + encodeURIComponent(nextTh) + (nextCh ? "/" + encodeURIComponent(nextCh) : "");
+      var qs = [];
+      if (nextMode === "mastered") qs.push("view=mastered");
+      if (nextMode !== "mastered" && nextW !== "") qs.push("w=" + encodeURIComponent(nextW));
+      return base + (qs.length ? "?" + qs.join("&") : "");
+    }
     if (th) arr = arr.filter(function (q) { return q._th === th && (!ch || q._ch === ch); });
-    var suffix = mode === "mastered" ? "?view=mastered" : "";
-    var lastWrong = mode === "current" ? wrongResumeInfo() : null;
+    var lastWrong = mode === "current" ? wrongResumeInfo(countFilter) : null;
     var lastWrongCard = lastWrong
       ? '<div class="card wrong-resume"><div><strong>' + esc(t("home.continue")) +
         '</strong><p class="muted">' + esc(t("quiz.of", { i: lastWrong.i, n: lastWrong.n })) +
         ' · ' + esc(lastWrong.id) + '</p></div>' +
         '<a class="btn primary" href="' + esc(lastWrong.href) +
-        '" data-act="resume-wrong">' + ic("right") + esc(t("nav.resume")) + '</a></div>'
+        '" data-act="resume-wrong" data-w="' + esc(countFilter) + '">' + ic("right") + esc(t("nav.resume")) + '</a></div>'
       : "";
     var head = '<section class="page-h"><span class="eyebrow">' + ic("alert") + esc(t("wrong.title")) + '</span><h1>' + esc(t("wrong.title")) + '</h1><p class="lede">' + esc(t(mode === "mastered" ? "wrong.masteredSub" : "wrong.sub")) + '</p>' +
       '<div class="seg" role="group" aria-label="' + esc(t("wrong.title")) + '">' +
-        '<a class="seg-btn' + (mode === "current" ? " on" : "") + '" href="#/wrong">' + esc(t("wrong.currentTab", { n: current.length })) + '</a>' +
-        '<a class="seg-btn' + (mode === "mastered" ? " on" : "") + '" href="#/wrong?view=mastered">' + esc(t("wrong.masteredTab", { n: mastered.length })) + '</a>' +
+        '<a class="seg-btn' + (mode === "current" ? " on" : "") + '" href="' + esc(wrongHref("current", "", "", countFilter)) + '">' + esc(t("wrong.currentTab", { n: current.length })) + '</a>' +
+        '<a class="seg-btn' + (mode === "mastered" ? " on" : "") + '" href="' + esc(wrongHref("mastered", "", "", "")) + '">' + esc(t("wrong.masteredTab", { n: mastered.length })) + '</a>' +
       '</div>' +
-      '<div class="chips" style="margin-top:14px"><a class="chip' + (!th ? " on" : "") + '" href="#/wrong' + suffix + '">' + esc(t("wrong.allCats")) + '</a>' +
+      (mode === "current" ? '<div class="wrong-filter"><span class="field-lbl">' + esc(t("wrong.filterLabel")) + '</span>' +
+        '<label class="langsel wrong-count-filter"><select data-role="wrong-count-filter" data-th="' + esc(th) + '" data-ch="' + esc(ch) + '" aria-label="' + esc(t("wrong.filterLabel")) + '">' +
+          '<option value=""' + (!countFilter ? " selected" : "") + '>' + esc(t("wrong.allCounts", { n: current.length })) + '</option>' +
+          countKeys.map(function (n) {
+            var label = n === "0" ? t("wrong.manual") : t("wrong.wrongTimes", { n: n });
+            return '<option value="' + esc(n) + '"' + (countFilter === n ? " selected" : "") + '>' + esc(label) + ' (' + counts[n] + ')</option>';
+          }).join("") +
+        '</select>' + ic("chev", "chev") + '</label></div>' : "") +
+      '<div class="chips" style="margin-top:14px"><a class="chip' + (!th ? " on" : "") + '" href="' + esc(wrongHref(mode, "", "", countFilter)) + '">' + esc(t("wrong.allCats")) + '</a>' +
       INDEX.themes.filter(function (T) { return arr.some(function (q) { return q._th === T.th; }); }).map(function (T) {
-        return '<a class="chip' + (th === T.th ? " on" : "") + '" href="#/wrong/' + encodeURIComponent(T.th) + suffix + '">' + esc(T.thz || trName(T.thd, T.the, zhTheme(T.th))) + '</a>';
+        return '<a class="chip' + (th === T.th ? " on" : "") + '" href="' + esc(wrongHref(mode, T.th, "", countFilter)) + '">' + esc(T.thz || trName(T.thd, T.the, zhTheme(T.th))) + '</a>';
       }).join("") + '</div>';
     if (!arr.length) return head + lastWrongCard + '<div class="empty card"><h2>' + esc(t(mode === "mastered" ? "wrong.masteredEmpty" : "wrong.empty")) + '</h2>' +
       (mode === "mastered" ? "" : '<a class="btn primary" href="#/categories">' + esc(t("wrong.emptyAction")) + '</a>') + '</div></section>';
-    var practiceHref = '#/practice?ids=' + encodeURIComponent(arr.map(function (q) { return q.id; }).join(",")) + '&src=wrong';
+    var practiceHref = '#/practice?ids=' + encodeURIComponent(arr.map(function (q) { return q.id; }).join(",")) + '&src=wrong' +
+      (countFilter ? '&wc=' + encodeURIComponent(countFilter) : '');
     return head + lastWrongCard +
       '<div class="hero-cta"><a class="btn primary" href="' + practiceHref + '">' + ic("refresh") + esc(t("wrong.retryAll")) + '</a><span class="muted">' + esc(t("wrong.count", { n: arr.length })) + '</span></div>' +
       '<div class="wrong-list">' + arr.map(function (q) {
@@ -1790,7 +1875,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v112 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v113 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2369,7 +2454,8 @@
     }
     if (act === "resume-wrong") {
       e.preventDefault();
-      var rw = progResumeWrongLocal();
+      var wkey = el.getAttribute("data-w") || "";
+      var rw = wkey ? progResumeWrongGroupLocal(wkey) : progResumeWrongLocal();
       if (rw) go(rw.hash);
       return;
     }
@@ -2418,7 +2504,7 @@
     if (act === "unwrong") { var id = el.getAttribute("data-id"); var s = qState(id); s.wrong = false; s.at = Date.now(); saveState(); route(); toast(t("wrong.mastered")); return; }
     if (act === "wrong-relearn") { var rid = el.getAttribute("data-id"); toggleWrong(rid); route(); toast(t("quiz.addedWrong")); return; }
     if (act === "export") { exportData(); return; }
-    if (act === "reset") { if (confirm(t("settings.resetConfirm"))) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = Date.now(); progWipe = true; try { localStorage.removeItem(RESUME_KEY); localStorage.removeItem(RESUME_WRONG_KEY); } catch (e) {} saveState(); toast(t("settings.resetDone")); route(); } return; }
+    if (act === "reset") { if (confirm(t("settings.resetConfirm"))) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = Date.now(); progWipe = true; try { localStorage.removeItem(RESUME_KEY); localStorage.removeItem(RESUME_WRONG_KEY); localStorage.removeItem(RESUME_WRONG_GROUPS_KEY); } catch (e) {} saveState(); toast(t("settings.resetDone")); route(); } return; }
     if (act === "ai-save") { var base = val("ai-base"), key = val("ai-key"), model = "auto"; localStorage.setItem("dtt.ai", JSON.stringify({ base: base, key: key, model: model })); var s2 = document.querySelector('[data-role="ai-status"]'); if (s2) s2.textContent = window.AI.hasLLM() ? t("ai.llmBadge") : t("ai.offlineBadge"); toast(t("settings.aiSaved")); return; }
     if (act === "ai-clear") { localStorage.removeItem("dtt.ai"); document.getElementById("view").innerHTML = vSettings(); toast(t("settings.aiClear")); return; }
     if (act === "pay") { doCheckout(el.getAttribute("data-provider"), el.getAttribute("data-currency"), el.getAttribute("data-method")); return; }
@@ -2455,7 +2541,7 @@
       }
       doLogin(authVal("a-name")); return;
     }
-    if (act === "logout") { var hadToken = !!prefs.token; prefs.user = ""; prefs.uid = ""; prefs.lic = ""; prefs.token = ""; prefs.serverLeft = null; savePrefs(); syncUser(); try { localStorage.removeItem("dtt.ai"); localStorage.removeItem(RESUME_KEY); localStorage.removeItem(RESUME_WRONG_KEY); } catch (e) {} if (hadToken) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = 0; progPushedSig = ""; try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e2) {} } if (session) rerenderQuiz(); else route(); renderTopbar(); toast(t("login.bye")); return; }
+    if (act === "logout") { var hadToken = !!prefs.token; prefs.user = ""; prefs.uid = ""; prefs.lic = ""; prefs.token = ""; prefs.serverLeft = null; savePrefs(); syncUser(); try { localStorage.removeItem("dtt.ai"); localStorage.removeItem(RESUME_KEY); localStorage.removeItem(RESUME_WRONG_KEY); localStorage.removeItem(RESUME_WRONG_GROUPS_KEY); } catch (e) {} if (hadToken) { state = { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 }; progSavedAt = 0; progPushedSig = ""; try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e2) {} } if (session) rerenderQuiz(); else route(); renderTopbar(); toast(t("login.bye")); return; }
     if (act === "ai-unlock2") { unlockApply(unlockKeyFrom("lk2")); return; }
     if (act === "ai-unlock") { unlockApply(unlockKeyFrom("lkey")); return; }
     if (act === "support") { showSupport(); return; }
@@ -2492,6 +2578,13 @@
     if (e.target.matches('[data-role="aiform"]')) { e.preventDefault(); if (!aiGate()) return; var inp = e.target.querySelector('[data-role="aiinput"]'); var txt = inp.value.trim(); if (!txt) return; inp.value = ""; aiAsk(currentQ(), txt); }
   });
   document.addEventListener("change", function (e) {
+    if (e.target.matches('[data-role="wrong-count-filter"]')) {
+      var wth = e.target.getAttribute("data-th") || "";
+      var wch = e.target.getAttribute("data-ch") || "";
+      var wbase = "#/wrong" + (wth ? "/" + encodeURIComponent(wth) + (wch ? "/" + encodeURIComponent(wch) : "") : "");
+      go(wbase + (e.target.value === "" ? "" : "?w=" + encodeURIComponent(e.target.value)));
+      return;
+    }
     if (e.target.matches("select[data-lang]")) {
       var kind = e.target.getAttribute("data-lang");
       prefs[kind === "ui" ? "uiLang" : "contentLang"] = e.target.value;

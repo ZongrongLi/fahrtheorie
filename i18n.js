@@ -123,6 +123,8 @@ window.I18N = {
     "wrong.retryAll": "Re-practise all mistakes",
     "wrong.byCat": "By category",
     "wrong.allCats": "All categories",
+    "wrong.filterLabel": "Filter by times wrong",
+    "wrong.allCounts": "All mistake counts ({n})",
     "wrong.count": "{n} mistakes",
     "wrong.remove": "Remove from mistake book",
     "wrong.wrongTimes": "Wrong {n}×",

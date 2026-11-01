@@ -13,7 +13,7 @@ assert.equal(appSource.split(marker).length, 2, 'boot marker must be unique');
 const instrumented = appSource.replace(marker,
   '  window.testProg = { serialize: progSerialize, merge: progMerge, push: progPush, pull: progPull,\n' +
   '    status: progStatusText, sync: function () { return progSync; },\n' +
-  '    saveState: saveState,\n' +
+  '    saveState: saveState, syncAt: syncAt,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
   '    getPrefs: function () { return prefs; } };\n' +
   '  window.testWrong = { recordAnswer: recordAnswer, revealAnswer: revealAnswer, grade: grade,\n' +
@@ -665,4 +665,121 @@ test('wrong book shows the exact saved wrong-session position', () => {
   assert.match(wrong, /data-act="resume-wrong"/, 'the card uses its own wrong-book action');
   assert.doesNotMatch(wrong, /data-act="resume-last"/, 'the global resume action must not overwrite the card href');
   assert.match(wrong, /at=1\.1\.01-002/, 'the card keeps the exact saved question');
+});
+
+test('wrong book groups active mistakes by their wrong-answer count', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({
+    q: {
+      '1.1.01-001': { a: 3, w: 1, r: 2, last: false, wrong: true, at: 100 },
+      '1.1.01-002': { a: 4, w: 4, r: 0, last: false, wrong: true, at: 200 },
+    },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  const all = W.wrongView('', '', '');
+  assert.match(all, /data-role="wrong-count-filter"/, 'the wrong book exposes a count filter');
+  assert.match(all, /value="1"[^>]*>Wrong 1× \(1\)/, 'the filter lists the 1× group');
+  assert.match(all, /value="4"[^>]*>Wrong 4× \(1\)/, 'the filter lists the 4× group');
+  const four = W.wrongView('', '', '', '4');
+  assert.match(four, /Q2/, 'the 4× view keeps a question last answered wrong four times');
+  assert.doesNotMatch(four, /Q1/, 'the 4× view excludes other count groups');
+  assert.match(four, /&wc=4&at=1\.1\.01-002/, 'a grouped practice URL carries its group key');
+});
+
+test('each wrong-count group keeps its own resume card and position', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({
+    q: {
+      '1.1.01-001': { a: 3, w: 1, r: 2, last: false, wrong: true, at: 100 },
+      '1.1.01-002': { a: 4, w: 4, r: 0, last: false, wrong: true, at: 200 },
+    },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  P.store['dtt.resume.wrong.v1'] = JSON.stringify({
+    id: '1.1.01-001',
+    hash: '#/practice?ids=1.1.01-001%2C1.1.01-002&src=wrong&at=1.1.01-001',
+    at: 300,
+  });
+  P.store['dtt.resume.wrong.groups.v1'] = JSON.stringify({
+    4: {
+      id: '1.1.01-002',
+      hash: '#/practice?ids=1.1.01-002&src=wrong&wc=4&at=1.1.01-002',
+      at: 400,
+    },
+  });
+  const total = W.wrongView('', '', '');
+  const four = W.wrongView('', '', '', '4');
+  assert.match(total, /Question 1 \/ 2/, 'the total mistake session keeps its own position');
+  assert.match(four, /Question 1 \/ 1/, 'the 4× session keeps its own position');
+  assert.match(four, /data-act="resume-wrong" data-w="4"/, 'the grouped resume card targets only its group');
+});
+
+test('saving total and grouped wrong sessions never overwrites each other', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({
+    q: {
+      '1.1.01-001': { a: 1, w: 1, r: 0, last: false, wrong: true, at: 100 },
+      '1.1.01-002': { a: 4, w: 4, r: 0, last: false, wrong: true, at: 200 },
+    },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  W.setSession({ ids: ['1.1.01-001', '1.1.01-002'], i: 0, mode: 'normal', answers: {} });
+  P.context.location.hash = '#/practice?ids=1.1.01-001%2C1.1.01-002&src=wrong&at=1.1.01-001';
+  P.context.window.testProg.syncAt();
+  W.setSession({ ids: ['1.1.01-002'], i: 0, mode: 'normal', answers: {} });
+  P.context.location.hash = '#/practice?ids=1.1.01-002&src=wrong&wc=4&at=1.1.01-002';
+  P.context.window.testProg.syncAt();
+  const total = JSON.parse(P.store['dtt.resume.wrong.v1']);
+  const groups = JSON.parse(P.store['dtt.resume.wrong.groups.v1']);
+  assert.equal(total.id, '1.1.01-001', 'the total mistake session remains at its own question');
+  assert.equal(groups['4'].id, '1.1.01-002', 'the 4× session is stored under its own key');
+  assert.match(total.hash, /^((?!wc=).)*$/, 'the total session is not tagged as a count group');
+});
+
+test('wrong-count resumes upload and merge per group without replacing the total', async () => {
+  const total = {
+    id: '1.1.01-001',
+    hash: '#/practice?ids=1.1.01-001%2C1.1.01-002&src=wrong&at=1.1.01-001',
+    at: 300,
+  };
+  const group = {
+    id: '1.1.01-002',
+    hash: '#/practice?ids=1.1.01-002&src=wrong&wc=4&at=1.1.01-002',
+    at: 400,
+  };
+  const P = load({ prefs: signedIn, progress: { q: {}, notes: {}, days: {}, goal: 20, savedAt: 1 } });
+  P.store['dtt.resume.wrong.v1'] = JSON.stringify(total);
+  P.store['dtt.resume.wrong.groups.v1'] = JSON.stringify({ 4: group });
+  P.context.window.testProg.push(true);
+  await tick();
+  const upload = P.bodies.map((body) => {
+    try { return JSON.parse(body); } catch (e) { return null; }
+  }).find((body) => body && body.resumeWrongGroups);
+  assert.ok(upload, 'the grouped resume is included in the cloud payload');
+  assert.equal(upload.resumeWrong.id, '1.1.01-001');
+  assert.equal(upload.resumeWrongGroups['4'].id, '1.1.01-002');
+
+  const Q = load({ prefs: signedIn, progress: {
+    q: {}, notes: {}, days: {}, goal: 20, savedAt: 500, resumeWrong: total,
+    resumeWrongGroups: { 4: group },
+  } });
+  await tick();
+  assert.equal(JSON.parse(Q.store['dtt.resume.wrong.v1']).id, '1.1.01-001');
+  assert.equal(JSON.parse(Q.store['dtt.resume.wrong.groups.v1'])['4'].id, '1.1.01-002');
+});
+
+test('answering a mistake incorrectly again increments its group count', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  const q = { id: '1.1.01-001', t: 'single', ans: [0], num: null };
+  W.setState({
+    q: { [q.id]: { a: 1, w: 1, r: 0, last: false, wrong: true, at: 1 } },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  W.recordAnswer(q, false);
+  assert.equal(W.getState().q[q.id].w, 2, 'another wrong answer moves the question to the 2× group');
+  assert.equal(W.getState().q[q.id].wrong, true);
 });
