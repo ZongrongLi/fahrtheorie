@@ -604,6 +604,8 @@ test('resume is present in both desktop and mobile global navigation', () => {
     'desktop rail must expose resume');
   assert.match(html, /class="tabbar"[\s\S]*?data-act="resume-last"/,
     'mobile tab bar must expose resume even when the rail is hidden');
+  assert.match(appSource, /if \(act === "resume-last"\) \{[\s\S]*?go\(resumeHref\(rq\.id, rq\._th \|\| "ALL"\)\)/,
+    'resume must navigate directly instead of depending on the initial href');
 });
 
 test('admin view embeds user management against the worker API', () => {

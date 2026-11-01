@@ -1720,7 +1720,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v107 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v108 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2291,6 +2291,12 @@
     if (act === "exam-grade") return gradeAndShowExam();
     if (act === "exam-start") { startExam(); return; }
     if (act === "exam-abort") { if (confirm(t("exam.confirmAbort"))) { session = null; go("#/exam"); } return; }
+    if (act === "resume-last") {
+      e.preventDefault();
+      var rq = resumeQuestion() || CAT[0];
+      if (rq) go(resumeHref(rq.id, rq._th || "ALL"));
+      return;
+    }
     if (act === "exit") {
       var cq = (session && session.ids) ? BY[session.ids[session.i]] : null;
       // came from a category question list -> return exactly there; otherwise -> this question's category list
