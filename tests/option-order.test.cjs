@@ -18,7 +18,12 @@ const instrumented = appSource.replace(marker,
   '  window.testOrderPos = orderPos;\n' +
   '  window.testOrderLetter = orderLetter;\n' +
   '  window.testShuffleOrder = shuffleOrder;\n' +
-  '  window.testOpenSession = openSession;\n' + marker);
+  '  window.testOpenSession = openSession;\n' +
+  '  window.testStart = startFromRoute;\n' +
+  '  window.testHome = vHome;\n' +
+  '  window.testSession = function () { return session; };\n' +
+  '  window.testInitCatalog = function () { CAT_ALL = window.__CATALOG.slice(); BY = {}; CAT_ALL.forEach(function (q) { BY[q.id] = q; }); applyScope(); buildIndex(); };\n' +
+  '  window.testQuiz = { card: vQuiz, onOpt: onOpt, answer: function (id) { return session.answers[id]; } };\n' + marker);
 
 function fakeNode() {
   return {
@@ -40,11 +45,12 @@ function loadApp() {
     navigator: {}, fetch: () => Promise.reject(new Error('no network in tests')),
   };
   context.window = context;
+  context.window.AI = { hasLLM: () => false };
   context.document = {
     documentElement: { attrs: {}, setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k]; } },
     readyState: 'loading', addEventListener() {},
     querySelector() { return null; }, querySelectorAll() { return []; },
-    getElementById() { return null; }, createElement() { return fakeNode(); },
+    getElementById(id) { return id === 'view' ? fakeNode() : null; }, createElement() { return fakeNode(); },
     head: { appendChild() {} }, body: { appendChild() {} },
   };
   const store = {};
@@ -133,6 +139,35 @@ test('the stable practice order is deterministic, keeps canonical answers intact
   }
   assert.ok(threeOption > 100, 'need three-option questions');
   assert.ok(identities > threeOption * 0.08, `identity permutations almost never occur (${identities}/${threeOption})`);
+});
+
+test('option questions match the real exam: no answer-count cue and independent selection', () => {
+  const { context, questions } = loadApp();
+  context.window.testInitCatalog();
+  const q = questions.find((x) => x.t === 'single' && (x.oe || x.od).length === 3);
+  assert.ok(q, 'the catalogue needs a three-option single-answer question');
+  context.window.testOpenSession([q.id], { mode: 'normal', title: 'test' });
+  const html = context.window.testQuiz.card();
+  context.window.testQuiz.onOpt(0);
+  context.window.testQuiz.onOpt(1);
+  assert.deepEqual(Array.from(context.window.testQuiz.answer(q.id).sel), [0, 1],
+    'a one-correct question must still allow independent multi-selection while practising');
+
+  assert.equal((html.match(/class="box"/g) || []).length, 3, 'every option gets the same checkbox affordance');
+  assert.doesNotMatch(html, /Single choice|Multiple choice/, 'the card must not reveal the answer count');
+  assert.doesNotMatch(html, /class="opts multi"/, 'single- and multiple-answer questions must use the same option list style');
+});
+
+test('the real-exam check creates a bounded mixed practice set', () => {
+  const { context, questions } = loadApp();
+  context.window.testInitCatalog();
+  context.location.hash = '#/practice?c=ALL&m=all&s=rnd&n=2&src=real';
+  context.window.testStart('c=ALL&m=all&s=rnd&n=2&src=real', 'real-test');
+  const session = context.window.testSession();
+  assert.equal(session.ids.length, 2, 'the n parameter bounds the diagnostic set');
+  assert.equal(session.title, 'Real-exam check (100 mixed)');
+  assert.ok(session.ids.every((id) => questions.some((q) => q.id === id)));
+  assert.match(appSource, /data-act="real-check"/, 'the diagnostic is reachable from Home');
 });
 
 test('different exam seeds produce different orders', () => {

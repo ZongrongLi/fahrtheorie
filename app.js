@@ -853,6 +853,7 @@
           '<div class="hero-cta">' +
             '<a class="btn primary" href="' + esc(contHref) + '">' + ic("right") + esc(t("home.continue")) + '</a>' +
             '<button class="btn ghost" data-act="random">' + ic("refresh") + esc(t("home.random")) + '</button>' +
+            '<button class="btn ghost" data-act="real-check">' + ic("check") + esc(t("home.realCheck")) + '</button>' +
             '<a class="btn ghost" href="#/exam">' + ic("clock") + esc(t("home.exam")) + '</a>' +
             '<a class="btn ghost" href="#/wrong">' + ic("alert") + esc(t("nav.wrong")) + (wr ? ' (' + wr + ')' : '') + '</a>' +
           '</div>' +
@@ -982,12 +983,16 @@
   /* ---------------- practice session ---------------- */
   function startFromRoute(q, key) {
     var p = {};
-    (q || "").split("&").forEach(function (kv) { if (!kv) return; var a = kv.split("="); var k = a[0], v = a.slice(1).join("="); if (k === "c") p.c = decodeURIComponent(v || ""); else if (k === "ch") p.ch = decodeURIComponent(v || ""); else if (k === "m") p.m = v; else if (k === "s") p.s = v; else if (k === "ids") p.ids = decodeURIComponent(v || ""); else if (k === "q") p.q = decodeURIComponent(v || ""); else if (k === "at") p.at = decodeURIComponent(v || ""); else if (k === "nav") p.nav = v; else if (k === "src") p.src = v; else if (k === "wc") p.wc = v; });
+    (q || "").split("&").forEach(function (kv) { if (!kv) return; var a = kv.split("="); var k = a[0], v = a.slice(1).join("="); if (k === "c") p.c = decodeURIComponent(v || ""); else if (k === "ch") p.ch = decodeURIComponent(v || ""); else if (k === "m") p.m = v; else if (k === "s") p.s = v; else if (k === "n") p.n = v; else if (k === "ids") p.ids = decodeURIComponent(v || ""); else if (k === "q") p.q = decodeURIComponent(v || ""); else if (k === "at") p.at = decodeURIComponent(v || ""); else if (k === "nav") p.nav = v; else if (k === "src") p.src = v; else if (k === "wc") p.wc = v; });
     var ids;
     if (p.ids) ids = p.ids.split(",").filter(Boolean);
     else if (p.q) ids = [p.q];
-    if (!ids) ids = pickIds(p.c || "ALL", p.ch || "", p.m || "all", p.s || "seq");
-    var ttl = p.src === "wrong" ? t("nav.wrong") : p.src === "exam" ? t("exam.title") : sessionTitle(p);
+    if (!ids) {
+      ids = pickIds(p.c || "ALL", p.ch || "", p.m || "all", p.s || "seq");
+      var limit = Number(p.n) || 0;
+      if (limit > 0) ids = ids.slice(0, Math.min(ids.length, Math.floor(limit)));
+    }
+    var ttl = p.src === "wrong" ? t("nav.wrong") : p.src === "exam" ? t("exam.title") : p.src === "real" ? t("home.realCheck") : sessionTitle(p);
     openSession(ids, { c: p.c, ch: p.ch, m: p.m, mode: "normal", key: key, title: ttl });
     session._p = p;
     if (p.at) { var ix = session.ids.indexOf(p.at); if (ix >= 0) session.i = ix; }
@@ -1296,7 +1301,6 @@
     var meta = '<div class="q-meta">' +
       '<span class="qid">' + esc(q.id) + '</span>' +
       '<span class="chip">' + esc(t("quiz.points", { p: q.pt })) + '</span>' +
-      '<span class="chip">' + esc(t("quiz." + q.t)) + '</span>' +
       (q.vid ? '<span class="chip">' + ic("img") + esc(t("quiz.videoBadge")) + '</span>' : "") +
       '<button class="iconbtn' + (state.q[q.id] && state.q[q.id].wrong ? " on" : "") + '" data-act="wrong-add" title="' + esc(state.q[q.id] && state.q[q.id].wrong ? t("quiz.inWrong") : t("quiz.addWrong")) + '">' + ic("alert") + '</button>' +
       '<button class="iconbtn' + (state.q[q.id] && state.q[q.id].bm ? " on" : "") + '" data-act="bm" title="' + esc(t("quiz.bookmark")) + '">' + ic("bookmark") + '</button>' +
@@ -1321,12 +1325,12 @@
       opts = '<div class="num-input"><label for="num-' + esc(q.id) + '">' + esc(t("quiz.numberHint")) + '</label>' +
         '<input id="num-' + esc(q.id) + '" type="number" inputmode="numeric" data-role="numinput" value="' + esc(a.val) + '"' + (a.submitted ? " disabled" : "") + ' placeholder="0"></div>';
     } else {
-      opts = '<ul class="opts' + (q.t === "multi" ? " multi" : "") + '">' + qOrder(q).map(function (i, p) {
+      opts = '<ul class="opts">' + qOrder(q).map(function (i, p) {
         var on = a.sel.indexOf(i) >= 0;
         var cls = "opt" + (on ? " on" : "");
         if (a.submitted) { if (q.ans.indexOf(i) >= 0) cls += " right"; else if (on && !a.revealed) cls += " bad"; }
         return '<li class="' + cls + '" data-act="opt" data-i="' + i + '" role="button" tabindex="0" aria-pressed="' + on + '">' +
-          '<span class="box" aria-hidden="true">' + (q.t === "multi" ? ic("check") : "") + '</span>' +
+          '<span class="box" aria-hidden="true">' + ic("check") + '</span>' +
           '<span class="opt-body">' + optBody(q, i) + '</span>' +
           '<span class="badge-k">' + L(p) + '</span></li>';
       }).join("") + '</ul>';
@@ -1708,8 +1712,7 @@
   function onOpt(i) {
     var q = BY[session.ids[session.i]]; var a = session.answers[q.id];
     if (a.submitted) return;
-    if (q.t === "multi") { var k = a.sel.indexOf(i); if (k >= 0) a.sel.splice(k, 1); else a.sel.push(i); }
-    else a.sel = [i];
+    var k = a.sel.indexOf(i); if (k >= 0) a.sel.splice(k, 1); else a.sel.push(i);
     rerenderQuiz();
   }
   function rerenderQuiz() { syncAt(); var app = document.getElementById("view"); app.innerHTML = session.mode === "exam" ? vExam() : vQuiz(); if (session.mode !== "exam") preloadNeighbours(); mountMedia(); try { if (session.mode !== "exam" && session.ids[session.i]) discussLoad(session.ids[session.i]); } catch (e) {} }
@@ -1717,7 +1720,8 @@
   /* ---------------- exam ---------------- */
   function vExamHome() {
     return '<section class="page-h"><span class="eyebrow">' + ic("clock") + esc(t("exam.title")) + '</span><h1>' + esc(t("exam.title")) + '</h1><p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
-      '<div class="hero-cta"><button class="btn primary" data-act="exam-start">' + ic("clock") + esc(t("exam.start")) + '</button></div>' +
+      '<div class="hero-cta"><button class="btn primary" data-act="exam-start">' + ic("clock") + esc(t("exam.start")) + '</button>' +
+      '<button class="btn ghost" data-act="real-check">' + ic("check") + esc(t("home.realCheck")) + '</button></div>' +
       '<div class="note-card"><h4>' + esc(t("exam.grading")) + '</h4><p>' + esc(t("exam.passLine", { p: "≤ 10" })) + '</p></div></section>';
   }
   function vExam() {
@@ -1731,17 +1735,17 @@
 
     var opts = q.t === "num"
       ? '<div class="num-input"><label>' + esc(t("quiz.numberHint")) + '</label><input type="number" data-role="numinput" value="' + esc(a.val) + '"></div>'
-      : '<ul class="opts' + (q.t === "multi" ? " multi" : "") + '">' + qOrder(q).map(function (i, p) {
+      : '<ul class="opts">' + qOrder(q).map(function (i, p) {
           var on = a.sel.indexOf(i) >= 0;
           return '<li class="opt' + (on ? " on" : "") + '" data-act="opt" data-i="' + i + '" role="button" tabindex="0" aria-pressed="' + on + '">' +
-            '<span class="box">' + (q.t === "multi" ? ic("check") : "") + '</span><span class="opt-body">' + optBody(q, i) + '</span><span class="badge-k">' + L(p) + '</span></li>';
+            '<span class="box">' + ic("check") + '</span><span class="opt-body">' + optBody(q, i) + '</span><span class="badge-k">' + L(p) + '</span></li>';
         }).join("") + '</ul>';
     return '<section class="quiz exam"><header class="quiz-top">' +
       '<button class="iconbtn" data-act="exam-abort" title="' + esc(t("exam.abort")) + '">' + ic("x") + '</button>' +
       '<div class="quiz-title"><strong>' + esc(t("exam.title")) + '</strong><span class="muted">' + esc(t("exam.answeredCount", { a: answered, n: 30 })) + '</span></div>' +
       '<div class="timer" data-role="timer">' + ic("clock") + mm + ':' + ss + '</div></header>' +
       '<div class="progress"><span style="width:' + Math.round(answered / 30 * 100) + '%"></span></div>' +
-      '<article class="q-card"><div class="q-meta"><span class="qid">' + esc(q.id) + '</span><span class="chip">' + esc(t("quiz.points", { p: q.pt })) + '</span><span class="chip">' + esc(t("quiz." + q.t)) + '</span></div>' +
+      '<article class="q-card"><div class="q-meta"><span class="qid">' + esc(q.id) + '</span><span class="chip">' + esc(t("quiz.points", { p: q.pt })) + '</span></div>' +
       '<div class="q-text">' + stackText(q, "q", -1) + '</div>' + stemHtml(q) +
       (videoPath(q) ? '<figure class="q-fig q-vid"><video controls preload="auto" playsinline poster="' + (q.img ? imgSrcOf(q.img) : "") + '" data-vpath="' + videoPath(q) + '" onerror="this.closest(\'figure\').classList.add(\'novid\')"></video>' + (q.img ? '<img class="vid-fallback" src="' + imgSrcOf(q.img) + '" alt="' + esc(t("quiz.imgAlt")) + '">' : "") + '</figure>' : (q.img ? '<figure class="q-fig"><img src="' + imgSrcOf(q.img) + '" alt="' + esc(t("quiz.imgAlt")) + '" loading="lazy"></figure>' : "")) + opts +
       '<div class="q-actions"><button class="btn ghost" data-act="prev">' + esc(t("quiz.prev")) + '</button>' +
@@ -1875,7 +1879,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v113 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v114 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2467,7 +2471,7 @@
       go("#/categories"); return;
     }
     if (act === "home") { go("#/home"); return; }
-    if (act === "restart") { var p = session._p || {}; session = null; go("#/practice?c=" + encodeURIComponent(p.c || "ALL") + "&m=" + (p.m || "all") + "&s=rnd"); return; }
+    if (act === "restart") { var p = session._p || {}; session = null; go("#/practice?c=" + encodeURIComponent(p.c || "ALL") + "&m=" + (p.m || "all") + "&s=rnd" + (p.n ? "&n=" + encodeURIComponent(p.n) : "")); return; }
     if (act === "wrong-add") {
       var wq = currentQ(); if (!wq) return;
       var added = toggleWrong(wq.id);
@@ -2501,6 +2505,7 @@
     if (act === "ai-again") { if (!aiGate()) return; var qq0 = currentQ(); if (state.ai[qq0.id]) { delete state.ai[qq0.id]; saveState(); } aiHist[qq0.id] = []; rerenderQuiz(); aiGenerate(qq0); return; }
     if (act === "translate") return aiTranslate(currentQ());
     if (act === "random") { go("#/practice?c=ALL&m=all&s=rnd"); return; }
+    if (act === "real-check") { go("#/practice?c=ALL&m=all&s=rnd&n=100&src=real"); return; }
     if (act === "unwrong") { var id = el.getAttribute("data-id"); var s = qState(id); s.wrong = false; s.at = Date.now(); saveState(); route(); toast(t("wrong.mastered")); return; }
     if (act === "wrong-relearn") { var rid = el.getAttribute("data-id"); toggleWrong(rid); route(); toast(t("quiz.addedWrong")); return; }
     if (act === "export") { exportData(); return; }

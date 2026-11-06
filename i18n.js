@@ -17,6 +17,7 @@ window.I18N = {
     "home.lede": "The official TÜV/DEKRA theory bank — {n} questions, {img} with figures. Every answer and explanation is taken from the official catalogue — nothing is guessed.",
     "home.continue": "Continue last session",
     "home.random": "Random practice",
+    "home.realCheck": "Real-exam check (100 mixed)",
     "home.exam": "Mock exam (30 random questions)",
     "home.overall": "Overall progress",
     "home.answered": "Answered",
