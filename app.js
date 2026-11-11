@@ -959,7 +959,7 @@
         '<article class="card settings-card"><p>' + esc(t("types.hiddenHint")) + '</p></article></section>' +
       '<section class="block"><header class="block-h"><h2>' + esc(t("types.rulesTitle")) + '</h2></header>' +
         '<article class="card settings-card"><p>' + rules + '</p></article>' +
-        '<article class="card settings-card"><p><b>' + esc(t("types.cautionTitle")) + '</b> ' + esc(t("types.caution")) + '</p></article></section>' +
+        '<article class="card settings-card"><p>' + esc(t("types.caution")) + '</p></article></section>' +
       '<section class="block"><header class="block-h"><h2>' + esc(t("types.moreTitle")) + '</h2><span class="muted">' + esc(t("types.moreHint")) + '</span></header>' +
         '<article class="card settings-card"><p>' + esc(t("types.twoHint")) + '</p></article>' +
         '<div class="hero-cta"><a class="btn ghost" href="' + drill(three) + '">' + esc(t("types.practiceThree", { n: three.length })) + '</a>' +
@@ -1912,7 +1912,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v115 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v116 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
