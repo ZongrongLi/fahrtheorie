@@ -78,7 +78,7 @@
   function navFromHash(h) {
     var v = String(h || "").replace(/^#\/?/, "").split(/[/?]/)[0];
     if (v === "cat") return "categories";
-    if (v === "wrong" || v === "notes" || v === "exam" || v === "settings" || v === "home") return v;
+    if (v === "wrong" || v === "notes" || v === "exam" || v === "settings" || v === "home" || v === "types") return v;
     return "categories";
   }
 
@@ -814,6 +814,7 @@
     if (view === "home") app.innerHTML = vHome();
     else if (view === "categories") app.innerHTML = vCategories();
     else if (view === "cat") app.innerHTML = vCat(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""));
+    else if (view === "types") app.innerHTML = vSingleTypes();
     else if (view === "practice") { if (!session || session.key !== key) startFromRoute(query, key); app.innerHTML = vQuiz(); }
     else if (view === "wrong") app.innerHTML = vWrong(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""), queryArgs.view || "", queryArgs.w || "");
     else if (view === "notes") app.innerHTML = vNotes();
@@ -826,7 +827,7 @@
       el.classList.toggle("is-active", el.getAttribute("data-nav") === activeNav);
     });
     paintResumeLink();
-    if (["home", "categories", "cat", "wrong", "notes", "settings", "admin"].indexOf(view) >= 0) { session = null; lastHash = location.hash || "#/home"; }
+    if (["home", "categories", "cat", "types", "wrong", "notes", "settings", "admin"].indexOf(view) >= 0) { session = null; lastHash = location.hash || "#/home"; }
     mountMedia();
     window.scrollTo(0, 0);
     var main = document.getElementById("view"); if (main) main.focus({ preventScroll: true });
@@ -854,6 +855,7 @@
             '<a class="btn primary" href="' + esc(contHref) + '">' + ic("right") + esc(t("home.continue")) + '</a>' +
             '<button class="btn ghost" data-act="random">' + ic("refresh") + esc(t("home.random")) + '</button>' +
             '<button class="btn ghost" data-act="real-check">' + ic("check") + esc(t("home.realCheck")) + '</button>' +
+            '<a class="btn ghost" href="#/types">' + ic("layers") + esc(t("home.types")) + '</a>' +
             '<a class="btn ghost" href="#/exam">' + ic("clock") + esc(t("home.exam")) + '</a>' +
             '<a class="btn ghost" href="#/wrong">' + ic("alert") + esc(t("nav.wrong")) + (wr ? ' (' + wr + ')' : '') + '</a>' +
           '</div>' +
@@ -935,6 +937,35 @@
     return s;
   }
 
+  /* ---------------- views: single-choice logic ---------------- */
+  function vSingleTypes() {
+    var singles = CAT.filter(function (q) { return q.t !== "num" && q.ans.length === 1; });
+    var three = singles.filter(function (q) { return q.od.length === 3; });
+    var two = singles.filter(function (q) { return q.od.length === 2; });
+    var hidden = (window.__SINGLE_TRAPS || []).filter(function (id) { return !!BY[id]; });
+    function drill(ids) {
+      return "#/practice?ids=" + encodeURIComponent(ids.join(",")) + "&src=types&nav=types";
+    }
+    var rules = esc(t("types.rulesText")).replace(/\n/g, "<br>");
+    return '<section class="page-h">' +
+        '<a class="back" href="#/home">' + ic("left") + esc(t("nav.home")) + '</a>' +
+        '<span class="eyebrow">' + ic("layers") + esc(t("types.eyebrow")) + '</span>' +
+        '<h1>' + esc(t("types.title")) + '</h1>' +
+        '<p class="lede">' + esc(t("types.lede", { singles: singles.length, hidden: hidden.length, three: three.length })) + '</p>' +
+        '<div class="chips"><span class="chip">' + singles.length + ' single-answer</span><span class="chip">' + three.length + ' × 3 options</span><span class="chip warn">' + hidden.length + ' hidden</span><span class="chip">' + two.length + ' × 2 options</span></div>' +
+        '<div class="hero-cta"><a class="btn primary" href="' + drill(hidden) + '">' + ic("right") + esc(t("types.practiceHidden", { n: hidden.length })) + '</a></div>' +
+      '</section>' +
+      '<section class="block"><header class="block-h"><h2>' + esc(t("types.hiddenTitle")) + '</h2></header>' +
+        '<article class="card settings-card"><p>' + esc(t("types.hiddenHint")) + '</p></article></section>' +
+      '<section class="block"><header class="block-h"><h2>' + esc(t("types.rulesTitle")) + '</h2></header>' +
+        '<article class="card settings-card"><p>' + rules + '</p></article>' +
+        '<article class="card settings-card"><p><b>' + esc(t("types.cautionTitle")) + '</b> ' + esc(t("types.caution")) + '</p></article></section>' +
+      '<section class="block"><header class="block-h"><h2>' + esc(t("types.moreTitle")) + '</h2><span class="muted">' + esc(t("types.moreHint")) + '</span></header>' +
+        '<article class="card settings-card"><p>' + esc(t("types.twoHint")) + '</p></article>' +
+        '<div class="hero-cta"><a class="btn ghost" href="' + drill(three) + '">' + esc(t("types.practiceThree", { n: three.length })) + '</a>' +
+        '<a class="btn ghost" href="' + drill(two) + '">' + esc(t("types.practiceTwo", { n: two.length })) + '</a></div></section>';
+  }
+
   /* ---------------- views: categories ---------------- */
   function vCategories() {
     function part(title, list, start) {
@@ -942,6 +973,8 @@
         '<div class="tile-grid">' + list.map(function (T, i) { return themeTile(T, start + i); }).join("") + '</div></section>';
     }
     return '<section class="page-h"><span class="eyebrow">' + ic("grid") + esc(t("cat.title")) + '</span><h1>' + esc(t("cat.title")) + '</h1><p class="lede">' + esc(t("cat.sub")) + '</p></section>' +
+      '<section class="block"><header class="block-h"><h2>' + esc(t("types.title")) + '</h2><span class="muted">' + esc(t("types.short")) + '</span></header>' +
+        '<div class="hero-cta"><a class="btn primary" href="#/types">' + ic("layers") + esc(t("home.types")) + '</a></div></section>' +
       part(t("cat.part1"), INDEX.part1, 0) + part(t("cat.part2"), INDEX.part2, 3);
   }
   function vCat(th, ch) {
@@ -992,7 +1025,7 @@
       var limit = Number(p.n) || 0;
       if (limit > 0) ids = ids.slice(0, Math.min(ids.length, Math.floor(limit)));
     }
-    var ttl = p.src === "wrong" ? t("nav.wrong") : p.src === "exam" ? t("exam.title") : p.src === "real" ? t("home.realCheck") : sessionTitle(p);
+    var ttl = p.src === "wrong" ? t("nav.wrong") : p.src === "exam" ? t("exam.title") : p.src === "real" ? t("home.realCheck") : p.src === "types" ? t("types.title") : sessionTitle(p);
     openSession(ids, { c: p.c, ch: p.ch, m: p.m, mode: "normal", key: key, title: ttl });
     session._p = p;
     if (p.at) { var ix = session.ids.indexOf(p.at); if (ix >= 0) session.i = ix; }
@@ -1879,7 +1912,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v114 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v115 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
