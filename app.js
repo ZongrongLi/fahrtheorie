@@ -214,6 +214,9 @@
     for (k in sent.q) {
       a = sent.q[k]; b = got.q && got.q[k];
       if (!b || (Number(b.at) || 0) < (Number(a.at) || 0)) return false;
+      if ((Number(b.a) || 0) < (Number(a.a) || 0) ||
+          (Number(b.w) || 0) < (Number(a.w) || 0) ||
+          (Number(b.r) || 0) < (Number(a.r) || 0)) return false;
     }
     for (k in sent.days) if (((got.days || {})[k] | 0) < (sent.days[k] | 0)) return false;
     if (sent.resume) {
@@ -250,10 +253,24 @@
     var el = typeof document !== "undefined" && document.querySelector && document.querySelector('[data-role="prog-sync"]');
     if (el) el.textContent = progStatusText();
   }
+  function progMergeQ(a, b) {
+    a = a || {}; b = b || {};
+    var newer = ((Number(b.at) || 0) >= (Number(a.at) || 0)) ? b : a;
+    var out = {
+      a: Math.max(a.a | 0, b.a | 0),
+      w: Math.max(a.w | 0, b.w | 0),
+      r: Math.max(a.r | 0, b.r | 0),
+      last: !!newer.last,
+      wrong: !!newer.wrong,
+      at: Number(newer.at) || 0
+    };
+    if (a.bm || b.bm) out.bm = true;
+    return out;
+  }
   function progMerge(srv) {
     var k, o, c;
     for (k in (srv.q || {})) { o = state.q[k]; c = srv.q[k]; if (!c || !progIsB(k)) continue;
-      if (!o || ((Number(c.at) || 0) >= (Number(o.at) || 0))) { state.q[k] = { a: c.a | 0, w: c.w | 0, r: c.r | 0, last: !!c.last, wrong: !!c.wrong, at: Number(c.at) || 0 }; if (c.bm) state.q[k].bm = true; } }
+      state.q[k] = progMergeQ(o, c); }
     for (k in (srv.notes || {})) { o = state.notes[k]; c = srv.notes[k]; if (!c || !progIsB(k)) continue;
       if (!o || ((Number(c.at) || 0) >= (Number(o.at) || 0))) state.notes[k] = { text: String(c.text || "").slice(0, PROG_NOTE_BUDGET), at: Number(c.at) || 0 }; }
     for (k in (srv.days || {})) state.days[k] = Math.max(state.days[k] | 0, (srv.days[k] | 0));
@@ -1923,7 +1940,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v117 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v118 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------

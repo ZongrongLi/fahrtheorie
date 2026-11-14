@@ -127,6 +127,23 @@ test('login pulls cloud progress and merges it over the local one', async () => 
   assert.equal(JSON.parse(posts[0]).q['1.1.01-001'].a, 5, 'merged state is pushed back');
 });
 
+test('sync preserves the highest wrong count when another device has newer timestamps', () => {
+  const P = load({ prefs: signedIn });
+  P.context.window.testProg.setState({
+    q: { '1.1.01-001': { a: 3, w: 3, r: 0, last: false, wrong: true, at: 1000 } },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  P.context.window.testProg.merge({
+    q: { '1.1.01-001': { a: 4, w: 1, r: 3, last: true, wrong: false, at: 2000 } },
+    notes: {}, days: {}, goal: 20, savedAt: 2000,
+  });
+  const merged = P.context.window.testProg.getState().q['1.1.01-001'];
+  assert.equal(merged.w, 3, 'the higher wrong count must survive a newer record');
+  assert.equal(merged.a, 4, 'attempts use the higher counter');
+  assert.equal(merged.r, 3, 'correct answers use the higher counter');
+  assert.equal(merged.wrong, false, 'the newest answer still controls the active wrong flag');
+});
+
 test('logout with a backend account drops the local progress, guests keep theirs', () => {
   const P = load({ prefs: Object.assign({}, signedIn) });
   P.context.window.testProg.setState({ q: { '1.1.01-001': { a: 4, w: 0, r: 4, last: true, wrong: false, at: 100 } },
