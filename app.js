@@ -486,6 +486,14 @@
   var RTL_LANGS = { ar: 1, fa: 1, he: 1, ur: 1 };
   function langKnown(code) { for (var i = 0; i < UI_LANGS.length; i++) if (UI_LANGS[i][0] === code) return true; return false; }
   if (!langKnown(prefs.uiLang)) prefs.uiLang = "en";
+  /* Shared links can request a specific interface language, e.g. ?lang=zh#/types. */
+  try {
+    var langParam = /[?&]lang=([^&#]+)/.exec((typeof location !== "undefined" && location.search) || "");
+    if (langParam) {
+      var requestedLang = decodeURIComponent(langParam[1]);
+      if (langKnown(requestedLang)) { prefs.uiLang = requestedLang; savePrefs(); }
+    }
+  } catch (e) {}
   function contentLangs() {
     var c = prefs.contentLang;
     if (c === "zhen") return ["zh", "en"];
@@ -943,6 +951,8 @@
     var three = singles.filter(function (q) { return q.od.length === 3; });
     var two = singles.filter(function (q) { return q.od.length === 2; });
     var hidden = (window.__SINGLE_TRAPS || []).filter(function (id) { return !!BY[id]; });
+    var altLang = prefs.uiLang === "zh" ? "en" : "zh";
+    var altLabel = prefs.uiLang === "zh" ? "English" : "中文版";
     function drill(ids) {
       return "#/practice?ids=" + encodeURIComponent(ids.join(",")) + "&src=types&nav=types";
     }
@@ -951,8 +961,9 @@
         '<a class="back" href="#/home">' + ic("left") + esc(t("nav.home")) + '</a>' +
         '<span class="eyebrow">' + ic("layers") + esc(t("types.eyebrow")) + '</span>' +
         '<h1>' + esc(t("types.title")) + '</h1>' +
+        '<div class="hero-cta"><a class="btn ghost small" href="?lang=' + altLang + '#/types">' + esc(altLabel) + '</a></div>' +
         '<p class="lede">' + esc(t("types.lede", { singles: singles.length, hidden: hidden.length, three: three.length })) + '</p>' +
-        '<div class="chips"><span class="chip">' + singles.length + ' single-answer</span><span class="chip">' + three.length + ' × 3 options</span><span class="chip warn">' + hidden.length + ' hidden</span><span class="chip">' + two.length + ' × 2 options</span></div>' +
+        '<div class="chips"><span class="chip">' + singles.length + ' ' + esc(t("quiz.single")) + '</span><span class="chip">' + three.length + ' × 3 ' + esc(t("cat.questions")) + '</span><span class="chip warn">' + hidden.length + ' ' + esc(t("types.hiddenTitle")) + '</span><span class="chip">' + two.length + ' × 2 ' + esc(t("cat.questions")) + '</span></div>' +
         '<div class="hero-cta"><a class="btn primary" href="' + drill(hidden) + '">' + ic("right") + esc(t("types.practiceHidden", { n: hidden.length })) + '</a></div>' +
       '</section>' +
       '<section class="block"><header class="block-h"><h2>' + esc(t("types.hiddenTitle")) + '</h2></header>' +
@@ -1912,7 +1923,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v116 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v117 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
