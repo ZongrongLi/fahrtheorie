@@ -1844,7 +1844,7 @@
       var q = x.q, a = x.a;
       var langs = contentLangs();
       var text = langText(q, langs[0], "q", -1) || q.qe;
-      var stateText = a && ((a.sel && a.sel.length) || a.val !== "") ? t("exam.failed") : t("exam.unanswered");
+      var stateText = a && ((a.sel && a.sel.length) || a.val !== "") ? t("quiz.wrong") : t("exam.unanswered");
       return '<a class="qrow" href="' + wrongHref + '&at=' + encodeURIComponent(q.id) + '">' +
         '<span class="qrow-id">' + esc(q.id) + '</span>' +
         '<span class="qrow-body"><span class="qrow-q">' + esc(text) + '</span></span>' +
@@ -1968,7 +1968,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v120 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v121 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
