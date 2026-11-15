@@ -103,3 +103,12 @@ test('numeric questions are eligible in the official exam pools', () => {
   assert.ok(window.testExam.examPool('1.2').some((q) => q.t === 'num'), 'numeric basic questions stay eligible');
   assert.ok(window.testExam.examPool('2.*').some((q) => q.t === 'num'), 'numeric specific questions stay eligible');
 });
+
+test('the 20 fixed sets are deterministic and differ from one another', () => {
+  const window = load();
+  const first = window.testExam.buildExamIds('official-set-1').join(',');
+  const again = window.testExam.buildExamIds('official-set-1').join(',');
+  const second = window.testExam.buildExamIds('official-set-2').join(',');
+  assert.equal(first, again, 'the same set number must produce the same questions');
+  assert.notEqual(first, second, 'different set numbers must produce different sets');
+});

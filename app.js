@@ -86,7 +86,8 @@
       durationMs: s.durationMs | 0,
       graded: true,
       mode: "exam",
-      seed: s.seed || ""
+      seed: s.seed || "",
+      setNo: s.setNo | 0
     };
   }
   function saveLastExam() {
@@ -113,7 +114,7 @@
   function navFromHash(h) {
     var v = String(h || "").replace(/^#\/?/, "").split(/[/?]/)[0];
     if (v === "cat") return "categories";
-    if (v === "wrong" || v === "notes" || v === "exam" || v === "history" || v === "settings" || v === "home" || v === "types") return v;
+    if (v === "wrong" || v === "notes" || v === "exam" || v === "sets" || v === "history" || v === "settings" || v === "home" || v === "types") return v;
     return "categories";
   }
 
@@ -901,6 +902,7 @@
     else if (view === "wrong") app.innerHTML = vWrong(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""), queryArgs.view || "", queryArgs.w || "");
     else if (view === "notes") app.innerHTML = vNotes();
     else if (view === "history") app.innerHTML = vHistory();
+    else if (view === "sets") app.innerHTML = vExamSets();
     else if (view === "exam") {
       if (queryArgs.result === "1" && restoreLastExam()) app.innerHTML = vExamResult();
       else app.innerHTML = session && session.mode === "exam" ? vExam() : vExamHome();
@@ -913,7 +915,7 @@
       el.classList.toggle("is-active", el.getAttribute("data-nav") === activeNav);
     });
     paintResumeLink();
-    if (["home", "categories", "cat", "types", "wrong", "notes", "history", "settings", "admin"].indexOf(view) >= 0) { session = null; lastHash = location.hash || "#/home"; }
+    if (["home", "categories", "cat", "types", "wrong", "notes", "history", "sets", "settings", "admin"].indexOf(view) >= 0) { session = null; lastHash = location.hash || "#/home"; }
     mountMedia();
     window.scrollTo(0, 0);
     var main = document.getElementById("view"); if (main) main.focus({ preventScroll: true });
@@ -1136,6 +1138,25 @@
     return arr.map(function (q) { return q.id; });
   }
   function shuffle(a) { a = a.slice(); for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var t2 = a[i]; a[i] = a[j]; a[j] = t2; } return a; }
+  function seedRng(seed) {
+    var h = 2166136261 >>> 0, str = String(seed || "");
+    for (var i = 0; i < str.length; i++) h = Math.imul(h ^ str.charCodeAt(i), 16777619) >>> 0;
+    return function () {
+      h = (h + 0x6D2B79F5) >>> 0;
+      var t = h;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function shuffleSeeded(a, rng) {
+    a = a.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(rng() * (i + 1));
+      var t2 = a[i]; a[i] = a[j]; a[j] = t2;
+    }
+    return a;
+  }
   function openSession(ids, opts) {
     ids = (ids || []).filter(function (id) { return !!BY[id]; });
     session = { ids: ids, i: 0, mode: opts.mode || "normal", key: opts.key || "", title: opts.title || "", from: opts.c && opts.c !== "ALL" ? "categories" : "", answers: {}, startedAt: Date.now(), seed: opts.seed || "" };
@@ -1855,8 +1876,20 @@
     return '<section class="page-h"><span class="eyebrow">' + ic("clock") + esc(t("exam.title")) + '</span><h1>' + esc(t("exam.title")) + '</h1><p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
       '<div class="hero-cta"><button class="btn primary" data-act="exam-start">' + ic("clock") + esc(t("exam.start")) + '</button>' +
       '<button class="btn ghost" data-act="real-check">' + ic("check") + esc(t("home.realCheck")) + '</button>' +
+      '<a class="btn ghost" href="#/sets">' + ic("layers") + '1–20</a>' +
       '<a class="btn ghost" href="#/history">' + ic("clock") + esc(t("history.title")) + '</a></div>' +
       '<div class="note-card"><h4>' + esc(t("exam.grading")) + '</h4><p>' + esc(t("exam.passLine", { p: "≤ 10" })) + '</p></div></section>';
+  }
+  function vExamSets() {
+    var cards = "";
+    for (var i = 1; i <= 20; i++) {
+      cards += '<article class="card settings-card history-item"><header class="block-h"><h2>' + esc(t("exam.title")) + ' ' + i + '</h2><span class="chip">30</span></header>' +
+        '<p class="muted">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
+        '<div class="q-actions"><button class="btn primary small" data-act="exam-start-set" data-set="' + i + '">' + esc(t("exam.start")) + '</button></div></article>';
+    }
+    return '<section class="page-h"><a class="back" href="#/exam">' + ic("left") + esc(t("exam.title")) + '</a>' +
+      '<span class="eyebrow">' + ic("layers") + '1–20</span><h1>' + esc(t("exam.title")) + ' 1–20</h1>' +
+      '<p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p></section><section class="block"><div class="history-list">' + cards + '</div></section>';
   }
   function vExam() {
     var now = Date.now(); var left = Math.max(0, session.durationMs - (now - session.startedAt));
@@ -1923,7 +1956,8 @@
       err: session.err | 0,
       total: session.total | 0,
       pass: (session.err | 0) <= 10,
-      durationMs: session.durationMs | 0
+      durationMs: session.durationMs | 0,
+      setNo: session.setNo | 0
     };
     state.exams = mergeExamHistory([record], state.exams || []);
     session.historySaved = true;
@@ -1982,8 +2016,9 @@
           '<span class="qrow-meta"><span class="chip">' + esc(t("quiz.points", { p: q.pt })) + '</span></span></a>';
       }).join("");
       var pass = e.pass === true;
+      var setLabel = e.setNo ? ' · ' + esc(t("exam.title")) + ' ' + e.setNo : '';
       return '<article class="card settings-card history-item">' +
-        '<header class="block-h"><h2>#' + (exams.length - i) + ' · ' + esc(examDate(e.at)) + '</h2><span class="chip ' + (pass ? "" : "warn") + '">' + esc(pass ? t("exam.passed") : t("exam.failed")) + '</span></header>' +
+        '<header class="block-h"><h2>#' + (exams.length - i) + setLabel + ' · ' + esc(examDate(e.at)) + '</h2><span class="chip ' + (pass ? "" : "warn") + '">' + esc(pass ? t("exam.passed") : t("exam.failed")) + '</span></header>' +
         '<p><strong>' + ((e.total | 0) - (e.err | 0)) + ' / ' + (e.total | 0) + '</strong> · ' + esc(t("exam.errorPoints")) + ': ' + (e.err | 0) + ' · ' + (e.ids || []).length + ' ' + esc(t("cat.questions")) + '</p>' +
         (wrong.length ? '<div class="q-actions"><a class="btn primary small" href="' + wrongHref + '">' + esc(t("history.reviewWrong")) + ' (' + wrong.length + ')</a></div>' +
           '<details><summary>' + esc(t("wrong.title")) + ' · ' + esc(t("wrong.count", { n: wrong.length })) + '</summary><div class="wrong-list">' + rows + '</div></details>' : '') +
@@ -2099,7 +2134,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v123 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v124 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2669,6 +2704,7 @@
     if (act === "next-exam") { if (session.i + 1 >= 30) return gradeAndShowExam(); session.i++; rerenderQuiz(); return; }
     if (act === "exam-grade") return gradeAndShowExam();
     if (act === "exam-start") { startExam(); return; }
+    if (act === "exam-start-set") { var setNo = parseInt(el.getAttribute("data-set"), 10) || 1; startExam("official-set-" + setNo, setNo); return; }
     if (act === "exam-abort") { if (confirm(t("exam.confirmAbort"))) { session = null; go("#/exam"); } return; }
     if (act === "resume-last") {
       e.preventDefault();
@@ -2860,8 +2896,8 @@
       return th === "2.*" ? String(q.th).indexOf("2.") === 0 : q.th === th;
     });
   }
-  function pickExamPart(pool, count, target) {
-    pool = shuffle(pool);
+  function pickExamPart(pool, count, target, rng) {
+    pool = shuffleSeeded(pool, rng);
     var memo = {};
     function go(i, left, sum) {
       if (left === 0) return sum === target ? [] : null;
@@ -2881,20 +2917,22 @@
     }
     return go(0, count, 0);
   }
-  function buildExamIds() {
+  function buildExamIds(seed) {
+    var rng = seedRng(seed || ("random-" + Math.random().toString(36).slice(2) + "-" + Date.now()));
     var picked = [];
     for (var i = 0; i < EXAM_RULES.length; i++) {
       var rule = EXAM_RULES[i];
-      var part = pickExamPart(examPool(rule.th), rule.n, rule.pts);
+      var part = pickExamPart(examPool(rule.th), rule.n, rule.pts, rng);
       if (!part) return null;
       picked = picked.concat(part);
     }
-    return shuffle(picked).map(function (q) { return q.id; });
+    return shuffleSeeded(picked, rng).map(function (q) { return q.id; });
   }
-  function startExam() {
-    var ids = buildExamIds();
+  function startExam(seed, setNo) {
+    var examSeed = seed || ("x" + Math.random().toString(36).slice(2) + Date.now().toString(36));
+    var ids = buildExamIds(examSeed);
     if (!ids) return;
-    session = { ids: ids, i: 0, mode: "exam", answers: {}, startedAt: Date.now(), durationMs: 45 * 60 * 1000, graded: false, seed: "x" + Math.random().toString(36).slice(2) + Date.now().toString(36) };
+    session = { ids: ids, i: 0, mode: "exam", answers: {}, startedAt: Date.now(), durationMs: 45 * 60 * 1000, graded: false, seed: examSeed, setNo: setNo | 0 };
     if (location.hash === "#/exam") route(); else go("#/exam");
     clearInterval(window.__examTick);
     window.__examTick = setInterval(function () {
