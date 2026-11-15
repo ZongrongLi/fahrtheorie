@@ -18,7 +18,7 @@ const instrumented = appSource.replace(marker,
   '    getPrefs: function () { return prefs; } };\n' +
   '  window.testWrong = { recordAnswer: recordAnswer, revealAnswer: revealAnswer, grade: grade,\n' +
   '    gradeExam: gradeExam, toggleWrong: toggleWrong, wrongView: vWrong,\n' +
-  '    startExam: startExam,\n' +
+  '    startExam: startExam, examResult: vExamResult,\n' +
   '    homeView: vHome, resumeQuestion: resumeQuestion, lastAnswered: lastAnswered,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
   '    getSession: function () { return session; }, setSession: function (s) { session = s; } };\n' + marker);
@@ -800,4 +800,28 @@ test('answering a mistake incorrectly again increments its group count', () => {
   W.recordAnswer(q, false);
   assert.equal(W.getState().q[q.id].w, 2, 'another wrong answer moves the question to the 2× group');
   assert.equal(W.getState().q[q.id].wrong, true);
+});
+
+test('exam results list wrong questions and link to a wrong-only review', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setSession({
+    ids: ['1.1.01-001', '1.1.01-002'],
+    i: 0,
+    mode: 'exam',
+    answers: {
+      '1.1.01-001': { sel: [0], val: '', submitted: true, correct: true },
+      '1.1.01-002': { sel: [0], val: '', submitted: true, correct: false },
+    },
+    graded: true,
+    err: 3,
+    total: 7,
+    durationMs: 1000,
+    startedAt: 1,
+  });
+  const html = W.examResult();
+  assert.match(html, /Q2/, 'the wrong question text is shown in the result');
+  assert.match(html, /ids=1\.1\.01-002&src=exam&nav=exam/, 'the primary action reviews only wrong questions');
+  assert.match(html, /at=1\.1\.01-002/, 'each wrong row opens that question');
+  assert.match(html, /Practise mistakes only/, 'the wrong-only action is explicit');
 });

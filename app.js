@@ -1818,19 +1818,47 @@
     var err = 0, total = 0;
     session.ids.forEach(function (id) {
       var q = BY[id], a = session.answers[id]; total += q.pt;
-      var ok = a && (q.t === "num" ? String(a.val).trim() === String(q.num).trim() : (a.sel.length === q.ans.length && a.sel.every(function (i) { return q.ans.indexOf(i) >= 0; })));
+      var ok = examAnswerOk(q, a);
       if (!ok) { err += q.pt; }
-      if (a && (a.sel.length || a.val !== "")) recordAnswer(q, !!ok);
+      if (a && ((a.sel && a.sel.length) || a.val !== "")) recordAnswer(q, !!ok);
     });
     session.err = err; session.total = total; saveState();
   }
+  function examAnswerOk(q, a) {
+    if (!a) return false;
+    if (q.t === "num") return String(a.val).trim() === String(q.num).trim();
+    var sel = a.sel || [];
+    return sel.length === q.ans.length && sel.every(function (i) { return q.ans.indexOf(i) >= 0; });
+  }
   function vExamResult() {
     var pass = session.err <= 10;
+    var wrong = [];
+    session.ids.forEach(function (id) {
+      var q = BY[id], a = session.answers[id];
+      if (!examAnswerOk(q, a)) wrong.push({ q: q, a: a });
+    });
+    var wrongIds = wrong.map(function (x) { return x.q.id; });
+    var wrongHref = "#/practice?ids=" + encodeURIComponent(wrongIds.join(",")) + "&src=exam&nav=exam";
+    var allHref = "#/practice?ids=" + encodeURIComponent(session.ids.join(",")) + "&src=exam&nav=exam";
+    var wrongRows = wrong.map(function (x) {
+      var q = x.q, a = x.a;
+      var langs = contentLangs();
+      var text = langText(q, langs[0], "q", -1) || q.qe;
+      var stateText = a && ((a.sel && a.sel.length) || a.val !== "") ? t("exam.failed") : t("exam.unanswered");
+      return '<a class="qrow" href="' + wrongHref + '&at=' + encodeURIComponent(q.id) + '">' +
+        '<span class="qrow-id">' + esc(q.id) + '</span>' +
+        '<span class="qrow-body"><span class="qrow-q">' + esc(text) + '</span></span>' +
+        '<span class="qrow-meta"><span class="chip">' + esc(t("quiz.points", { p: q.pt })) + '</span><span class="chip warn">' + esc(stateText) + '</span></span></a>';
+    }).join("");
     return '<section class="empty card"><div class="done-ring ' + (pass ? "good" : "bad") + '">' + (session.total - session.err) + '<span>/' + session.total + '</span></div>' +
       '<h2>' + esc(pass ? t("exam.passed") : t("exam.failed")) + '</h2>' +
       '<p class="lede">' + esc(t("exam.errorPoints")) + ': ' + session.err + ' · ' + esc(t("exam.passLine", { p: "≤ 10" })) + '</p>' +
-      '<div class="q-actions center"><a class="btn primary" href="#/practice?ids=' + encodeURIComponent(session.ids.join(",")) + '&src=exam">' + esc(t("exam.review")) + '</a>' +
-      '<button class="btn ghost" data-act="exam-start">' + esc(t("exam.newExam")) + '</button></div></section>';
+      '<div class="q-actions center">' +
+      (wrong.length ? '<a class="btn primary" href="' + wrongHref + '">' + esc(t("quiz.againWrong")) + '</a>' : '') +
+      '<a class="btn ghost" href="' + allHref + '">' + esc(t("exam.review")) + '</a>' +
+      '<button class="btn ghost" data-act="exam-start">' + esc(t("exam.newExam")) + '</button></div></section>' +
+      (wrong.length ? '<section class="block"><header class="block-h"><h2>' + esc(t("wrong.title")) + '</h2><span class="muted">' + esc(t("wrong.count", { n: wrong.length })) + '</span></header>' +
+        '<div class="wrong-list">' + wrongRows + '</div></section>' : '');
   }
 
   /* ---------------- wrong book ---------------- */
@@ -1940,7 +1968,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v119 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v120 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------

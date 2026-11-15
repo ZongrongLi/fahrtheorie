@@ -37,7 +37,7 @@ test('the question-type page is wired from home, categories and practice', () =>
   assert.match(app, /href="#\/types"/);
   assert.match(app, /src=types&nav=types/);
   assert.match(app, /p\.src === "types"/);
-  assert.match(html, /data\/single-types\.js\?v=119/);
+  assert.match(html, /data\/single-types\.js\?v=120/);
   assert.match(app, /\[?&\]lang=/);
   assert.match(app, /href="\?lang=/);
   assert.match(app, /t\("quiz\.single"\)/);
