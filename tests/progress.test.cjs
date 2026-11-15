@@ -18,7 +18,8 @@ const instrumented = appSource.replace(marker,
   '    getPrefs: function () { return prefs; } };\n' +
   '  window.testWrong = { recordAnswer: recordAnswer, revealAnswer: revealAnswer, grade: grade,\n' +
   '    gradeExam: gradeExam, toggleWrong: toggleWrong, wrongView: vWrong,\n' +
-  '    startExam: startExam, examResult: vExamResult,\n' +
+  '    startExam: startExam, examResult: vExamResult, examBack: examResultBackLink,\n' +
+  '    restoreLastExam: restoreLastExam,\n' +
   '    homeView: vHome, resumeQuestion: resumeQuestion, lastAnswered: lastAnswered,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
   '    getSession: function () { return session; }, setSession: function (s) { session = s; } };\n' + marker);
@@ -824,4 +825,32 @@ test('exam results list wrong questions and link to a wrong-only review', () => 
   assert.match(html, /ids=1\.1\.01-002&src=exam&nav=exam/, 'the primary action reviews only wrong questions');
   assert.match(html, /at=1\.1\.01-002/, 'each wrong row opens that question');
   assert.match(html, /Practise mistakes only/, 'the wrong-only action is explicit');
+});
+
+test('exam review keeps a way back to the saved result page', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setSession({
+    ids: ['1.1.01-001', '1.1.01-002'],
+    i: 0,
+    mode: 'exam',
+    answers: {
+      '1.1.01-001': { sel: [0], val: '', submitted: true, correct: true },
+      '1.1.01-002': { sel: [0], val: '', submitted: true, correct: false },
+    },
+    graded: true,
+    err: 3,
+    total: 7,
+    durationMs: 1000,
+    startedAt: 1,
+  });
+  W.examResult();
+  W.setSession({
+    ids: ['1.1.01-002'], i: 0, mode: 'normal', answers: {}, startedAt: 1, seed: '',
+    _p: { src: 'exam' },
+  });
+  assert.match(W.examBack(), /href="#\/exam\?result=1"/, 'reviewing a mistake exposes the result link');
+  W.setSession({ ids: ['1.1.01-002'], i: 0, mode: 'normal', answers: {}, startedAt: 1, seed: '' });
+  assert.equal(W.restoreLastExam(), true, 'the result snapshot survives leaving the result page');
+  assert.match(W.examResult(), /Q2/, 'the restored result still lists the same wrong question');
 });

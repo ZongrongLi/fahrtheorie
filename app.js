@@ -74,7 +74,42 @@
   });
   window.__explLang = prefs.explLang;
   window.__explManual = false;   // per-question/settings override of the explanation language (session only)
-  var session = null, aiPanelOpen = {}, aiHist = {}, lastHash = "#/home", pendingGoogleCredential = "";
+  var session = null, lastExam = null, aiPanelOpen = {}, aiHist = {}, lastHash = "#/home", pendingGoogleCredential = "";
+  var LAST_EXAM_KEY = "dtt.exam.last.v1";
+  function examSnapshot(s) {
+    return {
+      ids: (s.ids || []).slice(),
+      answers: JSON.parse(JSON.stringify(s.answers || {})),
+      err: s.err | 0,
+      total: s.total | 0,
+      startedAt: s.startedAt | 0,
+      durationMs: s.durationMs | 0,
+      graded: true,
+      mode: "exam",
+      seed: s.seed || ""
+    };
+  }
+  function saveLastExam() {
+    if (!session || session.mode !== "exam" || !session.graded) return;
+    lastExam = examSnapshot(session);
+    try { sessionStorage.setItem(LAST_EXAM_KEY, JSON.stringify(lastExam)); } catch (e) {}
+  }
+  function loadLastExam() {
+    if (lastExam) return lastExam;
+    try {
+      var raw = sessionStorage.getItem(LAST_EXAM_KEY);
+      var parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && Array.isArray(parsed.ids) && parsed.answers &&
+          parsed.ids.every(function (id) { return !!BY[id]; })) lastExam = parsed;
+    } catch (e) {}
+    return lastExam;
+  }
+  function restoreLastExam() {
+    var saved = loadLastExam();
+    if (!saved) return false;
+    session = examSnapshot(saved);
+    return true;
+  }
   function navFromHash(h) {
     var v = String(h || "").replace(/^#\/?/, "").split(/[/?]/)[0];
     if (v === "cat") return "categories";
@@ -843,7 +878,10 @@
     else if (view === "practice") { if (!session || session.key !== key) startFromRoute(query, key); app.innerHTML = vQuiz(); }
     else if (view === "wrong") app.innerHTML = vWrong(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""), queryArgs.view || "", queryArgs.w || "");
     else if (view === "notes") app.innerHTML = vNotes();
-    else if (view === "exam") app.innerHTML = session && session.mode === "exam" ? vExam() : vExamHome();
+    else if (view === "exam") {
+      if (queryArgs.result === "1" && restoreLastExam()) app.innerHTML = vExamResult();
+      else app.innerHTML = session && session.mode === "exam" ? vExam() : vExamHome();
+    }
     else if (view === "settings") app.innerHTML = vSettings();
     else if (view === "admin") app.innerHTML = vAdmin();
     else app.innerHTML = vHome();
@@ -1338,6 +1376,10 @@
       pump();
     }).catch(function () { vidWarming = false; });
   }
+  function examResultBackLink() {
+    if (!session || !session._p || session._p.src !== "exam" || !loadLastExam()) return "";
+    return '<a class="btn ghost small exam-back" href="#/exam?result=1">' + ic("clock") + esc(t("exam.resultTitle")) + '</a>';
+  }
   function quizShell(q) {
     preloadNeighbours();
     var st = state.q[q.id] || {};
@@ -1350,6 +1392,7 @@
           '<button class="iconbtn" data-act="exit" title="' + esc(t("quiz.back")) + '">' + ic("left") + '</button>' +
           '<button class="iconbtn" data-act="home" title="' + esc(t("nav.home")) + '">' + ic("home") + '</button>' +
           '<div class="quiz-title"><strong>' + esc(session.title) + '</strong><span class="muted">' + esc(t("quiz.of", { i: session.i + 1, n: session.ids.length })) + '</span></div>' +
+          examResultBackLink() +
           '<div class="quiz-count">' + done + "/" + session.ids.length + '</div>' +
         '</header>' +
         '<div class="progress' + (session.mode) + '"><span style="width:' + pct + '%"></span></div>' +
@@ -1740,6 +1783,7 @@
       '<h2>' + esc(t("quiz.done")) + '</h2><p class="lede">' + esc(t("quiz.doneStats", { n: n, c: c })) + '</p>' +
       '<div class="q-actions center">' +
         (wr.length ? '<a class="btn primary" href="#/practice?ids=' + encodeURIComponent(wr.join(",")) + '">' + esc(t("quiz.againWrong")) + '</a>' : "") +
+        examResultBackLink() +
         '<button class="btn ghost" data-act="restart">' + esc(t("quiz.restart")) + '</button>' +
         '<a class="btn ghost" href="#/categories">' + esc(t("quiz.backToCats")) + '</a>' +
       '</div></section>';
@@ -1822,7 +1866,7 @@
       if (!ok) { err += q.pt; }
       if (a && ((a.sel && a.sel.length) || a.val !== "")) recordAnswer(q, !!ok);
     });
-    session.err = err; session.total = total; saveState();
+    session.err = err; session.total = total; saveState(); saveLastExam();
   }
   function examAnswerOk(q, a) {
     if (!a) return false;
@@ -1831,6 +1875,7 @@
     return sel.length === q.ans.length && sel.every(function (i) { return q.ans.indexOf(i) >= 0; });
   }
   function vExamResult() {
+    saveLastExam();
     var pass = session.err <= 10;
     var wrong = [];
     session.ids.forEach(function (id) {
@@ -1968,7 +2013,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v121 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v122 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
