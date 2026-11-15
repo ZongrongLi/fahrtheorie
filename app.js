@@ -1940,7 +1940,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v118 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v119 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2688,8 +2688,53 @@
   });
 
   function gradeAndShowExam() { gradeExam(); clearInterval(window.__examTick); rerenderQuiz(); }
+  var EXAM_RULES = [
+    { th: "1.1", n: 8, pts: 32 },
+    { th: "1.2", n: 6, pts: 21 },
+    { th: "1.3", n: 3, pts: 15 },
+    { th: "1.4", n: 2, pts: 6 },
+    { th: "1.5", n: 1, pts: 3 },
+    { th: "2.*", n: 10, pts: 33 }
+  ];
+  function examPool(th) {
+    return CAT.filter(function (q) {
+      return th === "2.*" ? String(q.th).indexOf("2.") === 0 : q.th === th;
+    });
+  }
+  function pickExamPart(pool, count, target) {
+    pool = shuffle(pool);
+    var memo = {};
+    function go(i, left, sum) {
+      if (left === 0) return sum === target ? [] : null;
+      if (i >= pool.length) return null;
+      var key = i + "|" + left + "|" + sum;
+      if (memo[key] !== undefined) return memo[key];
+      var q = pool[i];
+      if (sum + q.pt <= target) {
+        var withQ = go(i + 1, left - 1, sum + q.pt);
+        if (withQ) {
+          memo[key] = [q].concat(withQ);
+          return memo[key];
+        }
+      }
+      memo[key] = go(i + 1, left, sum);
+      return memo[key];
+    }
+    return go(0, count, 0);
+  }
+  function buildExamIds() {
+    var picked = [];
+    for (var i = 0; i < EXAM_RULES.length; i++) {
+      var rule = EXAM_RULES[i];
+      var part = pickExamPart(examPool(rule.th), rule.n, rule.pts);
+      if (!part) return null;
+      picked = picked.concat(part);
+    }
+    return shuffle(picked).map(function (q) { return q.id; });
+  }
   function startExam() {
-    var ids = shuffle(CAT.filter(function (q) { return q.t !== "num"; })).slice(0, 30).map(function (q) { return q.id; });
+    var ids = buildExamIds();
+    if (!ids) return;
     session = { ids: ids, i: 0, mode: "exam", answers: {}, startedAt: Date.now(), durationMs: 45 * 60 * 1000, graded: false, seed: "x" + Math.random().toString(36).slice(2) + Date.now().toString(36) };
     if (location.hash === "#/exam") route(); else go("#/exam");
     clearInterval(window.__examTick);

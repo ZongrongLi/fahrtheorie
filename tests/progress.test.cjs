@@ -18,6 +18,7 @@ const instrumented = appSource.replace(marker,
   '    getPrefs: function () { return prefs; } };\n' +
   '  window.testWrong = { recordAnswer: recordAnswer, revealAnswer: revealAnswer, grade: grade,\n' +
   '    gradeExam: gradeExam, toggleWrong: toggleWrong, wrongView: vWrong,\n' +
+  '    startExam: startExam,\n' +
   '    homeView: vHome, resumeQuestion: resumeQuestion, lastAnswered: lastAnswered,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
   '    getSession: function () { return session; }, setSession: function (s) { session = s; } };\n' + marker);
