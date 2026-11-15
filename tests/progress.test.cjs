@@ -19,6 +19,7 @@ const instrumented = appSource.replace(marker,
   '  window.testWrong = { recordAnswer: recordAnswer, revealAnswer: revealAnswer, grade: grade,\n' +
   '    gradeExam: gradeExam, toggleWrong: toggleWrong, wrongView: vWrong,\n' +
   '    startExam: startExam, examResult: vExamResult, examBack: examResultBackLink,\n' +
+  '    historyView: vHistory,\n' +
   '    restoreLastExam: restoreLastExam,\n' +
   '    homeView: vHome, resumeQuestion: resumeQuestion, lastAnswered: lastAnswered,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
@@ -853,4 +854,53 @@ test('exam review keeps a way back to the saved result page', () => {
   W.setSession({ ids: ['1.1.01-002'], i: 0, mode: 'normal', answers: {}, startedAt: 1, seed: '' });
   assert.equal(W.restoreLastExam(), true, 'the result snapshot survives leaving the result page');
   assert.match(W.examResult(), /Q2/, 'the restored result still lists the same wrong question');
+});
+
+test('every graded exam is recorded with its score and wrong question IDs', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20, exams: [] });
+  W.setSession({
+    ids: ['1.1.01-001', '1.1.01-002'],
+    i: 0,
+    mode: 'exam',
+    answers: {
+      '1.1.01-001': { sel: [0], val: '', submitted: true, correct: true },
+      '1.1.01-002': { sel: [0], val: '', submitted: true, correct: false },
+    },
+    graded: false,
+    durationMs: 1000,
+    startedAt: 1,
+  });
+  W.gradeExam();
+  const exams = W.getState().exams;
+  assert.equal(exams.length, 1);
+  assert.equal(exams[0].err, 3);
+  assert.equal(exams[0].total, 7);
+  assert.equal(exams[0].pass, true);
+  assert.equal(exams[0].wrong.map((x) => x.id).join(','), '1.1.01-002');
+  const html = W.historyView();
+  assert.match(html, /#1/);
+  assert.match(html, /Q2/);
+  assert.match(html, /nav=history/);
+});
+
+test('exam history is serialized and merged through cloud progress', () => {
+  const P = load({ prefs: signedIn });
+  const exam = {
+    at: 1234,
+    ids: ['1.1.01-001', '1.1.01-002'],
+    wrong: [{ id: '1.1.01-002', sel: [0] }],
+    err: 3,
+    total: 7,
+    pass: true,
+    durationMs: 1000,
+  };
+  P.context.window.testProg.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20, exams: [exam] });
+  const payload = P.context.window.testProg.serialize();
+  assert.equal(payload.exams.map((x) => x.at).join(','), '1234');
+  const Q = load({ prefs: signedIn });
+  Q.context.window.testProg.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20, exams: [] });
+  Q.context.window.testProg.merge({ q: {}, notes: {}, days: {}, goal: 20, savedAt: 1, exams: [exam] });
+  assert.equal(Q.context.window.testProg.getState().exams[0].wrong[0].id, '1.1.01-002');
 });

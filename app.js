@@ -62,7 +62,7 @@
     CAT = (prefs.scope === "all") ? CAT_ALL.slice() : CAT_ALL.filter(isClassB);
     buildIndex();
   }
-  var state = load("dtt.state.v1", { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20 });
+  var state = load("dtt.state.v1", { q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20, exams: [] });
   var RESUME_KEY = "dtt.resume.v1", RESUME_WRONG_KEY = "dtt.resume.wrong.v1";
   var RESUME_WRONG_GROUPS_KEY = "dtt.resume.wrong.groups.v1";
   var prefs = load("dtt.prefs", { uiLang: "en", contentLang: "en", theme: "light", explLang: "en", scope: "b", donateLink: "", donateQR: "", buyUrl: "", lic: "", licBase: "", uid: "", user: "", freeLeft: 10, apiBase: "", token: "", serverLeft: null, googleClientId: "", unlimited: false });
@@ -113,7 +113,7 @@
   function navFromHash(h) {
     var v = String(h || "").replace(/^#\/?/, "").split(/[/?]/)[0];
     if (v === "cat") return "categories";
-    if (v === "wrong" || v === "notes" || v === "exam" || v === "settings" || v === "home" || v === "types") return v;
+    if (v === "wrong" || v === "notes" || v === "exam" || v === "history" || v === "settings" || v === "home" || v === "types") return v;
     return "categories";
   }
 
@@ -214,6 +214,8 @@
       if (e && e.text) notes[k] = { text: String(e.text).slice(0, PROG_NOTE_BUDGET), at: Number(e.at) || 0 }; }
     for (k in state.days) { if ((state.days[k] | 0) > 0) days[k] = state.days[k] | 0; }
     var out = { q: q, notes: progFitNotes(notes), days: days, goal: state.goal | 0 || 20 };
+    var exams = mergeExamHistory(state.exams, []);
+    if (exams.length) out.exams = exams;
     var resume = progResumeLocal();
     if (resume) out.resume = resume;
     var wrongResume = progResumeWrongLocal() ||
@@ -234,6 +236,7 @@
     for (k in full.notes) if (JSON.stringify(full.notes[k]) !== JSON.stringify((progAcked.notes || {})[k])) notes[k] = full.notes[k];
     for (k in full.days) if ((full.days[k] | 0) > ((progAcked.days || {})[k] | 0)) days[k] = full.days[k];
     var out = { q: q, notes: notes, days: days, goal: full.goal, savedAt: full.savedAt };
+    if (JSON.stringify(full.exams || []) !== JSON.stringify(progAcked.exams || [])) out.exams = full.exams || [];
     if (progResumeNewer(full.resume, progAcked.resume)) out.resume = full.resume;
     if (progResumeNewer(full.resumeWrong, progAcked.resumeWrong)) out.resumeWrong = full.resumeWrong;
     var changedGroups = {}, groups = full.resumeWrongGroups || {}, ackedGroups = progAcked.resumeWrongGroups || {};
@@ -254,6 +257,14 @@
           (Number(b.r) || 0) < (Number(a.r) || 0)) return false;
     }
     for (k in sent.days) if (((got.days || {})[k] | 0) < (sent.days[k] | 0)) return false;
+    if (sent.exams && sent.exams.length) {
+      var gotExams = got.exams || [];
+      for (var ei = 0; ei < sent.exams.length; ei++) {
+        var found = false;
+        for (var gi = 0; gi < gotExams.length; gi++) if ((gotExams[gi].at | 0) === (sent.exams[ei].at | 0)) { found = true; break; }
+        if (!found) return false;
+      }
+    }
     if (sent.resume) {
       var gr = progResumeValue(got.resume);
       if (!gr || gr.at < sent.resume.at || (gr.at === sent.resume.at && gr.id !== sent.resume.id)) return false;
@@ -302,6 +313,16 @@
     if (a.bm || b.bm) out.bm = true;
     return out;
   }
+  function mergeExamHistory(local, remote) {
+    var byAt = {};
+    (local || []).concat(remote || []).forEach(function (e) {
+      if (!e || !e.at || !Array.isArray(e.ids)) return;
+      byAt[String(e.at)] = e;
+    });
+    return Object.keys(byAt).map(function (k) { return byAt[k]; })
+      .sort(function (a, b) { return (b.at | 0) - (a.at | 0); })
+      .slice(0, 50);
+  }
   function progMerge(srv) {
     var k, o, c;
     for (k in (srv.q || {})) { o = state.q[k]; c = srv.q[k]; if (!c || !progIsB(k)) continue;
@@ -309,6 +330,7 @@
     for (k in (srv.notes || {})) { o = state.notes[k]; c = srv.notes[k]; if (!c || !progIsB(k)) continue;
       if (!o || ((Number(c.at) || 0) >= (Number(o.at) || 0))) state.notes[k] = { text: String(c.text || "").slice(0, PROG_NOTE_BUDGET), at: Number(c.at) || 0 }; }
     for (k in (srv.days || {})) state.days[k] = Math.max(state.days[k] | 0, (srv.days[k] | 0));
+    if (srv.exams && srv.exams.length) state.exams = mergeExamHistory(state.exams, srv.exams);
     state.notes = progFitNotes(state.notes);
     if ((srv.savedAt | 0) >= progSavedAt) { state.goal = srv.goal | 0 || state.goal; progSavedAt = srv.savedAt | 0; }
     var remoteResume = progResumeValue(srv.resume), localResume = progResumeLocal();
@@ -878,6 +900,7 @@
     else if (view === "practice") { if (!session || session.key !== key) startFromRoute(query, key); app.innerHTML = vQuiz(); }
     else if (view === "wrong") app.innerHTML = vWrong(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""), queryArgs.view || "", queryArgs.w || "");
     else if (view === "notes") app.innerHTML = vNotes();
+    else if (view === "history") app.innerHTML = vHistory();
     else if (view === "exam") {
       if (queryArgs.result === "1" && restoreLastExam()) app.innerHTML = vExamResult();
       else app.innerHTML = session && session.mode === "exam" ? vExam() : vExamHome();
@@ -890,7 +913,7 @@
       el.classList.toggle("is-active", el.getAttribute("data-nav") === activeNav);
     });
     paintResumeLink();
-    if (["home", "categories", "cat", "types", "wrong", "notes", "settings", "admin"].indexOf(view) >= 0) { session = null; lastHash = location.hash || "#/home"; }
+    if (["home", "categories", "cat", "types", "wrong", "notes", "history", "settings", "admin"].indexOf(view) >= 0) { session = null; lastHash = location.hash || "#/home"; }
     mountMedia();
     window.scrollTo(0, 0);
     var main = document.getElementById("view"); if (main) main.focus({ preventScroll: true });
@@ -920,6 +943,7 @@
             '<button class="btn ghost" data-act="real-check">' + ic("check") + esc(t("home.realCheck")) + '</button>' +
             '<a class="btn ghost" href="#/types">' + ic("layers") + esc(t("home.types")) + '</a>' +
             '<a class="btn ghost" href="#/exam">' + ic("clock") + esc(t("home.exam")) + '</a>' +
+            '<a class="btn ghost" href="#/history">' + ic("clock") + esc(t("history.title")) + '</a>' +
             '<a class="btn ghost" href="#/wrong">' + ic("alert") + esc(t("nav.wrong")) + (wr ? ' (' + wr + ')' : '') + '</a>' +
           '</div>' +
           '<p class="fineprint">' + esc(t("home.dataNote")) + '</p>' +
@@ -1377,7 +1401,11 @@
     }).catch(function () { vidWarming = false; });
   }
   function examResultBackLink() {
-    if (!session || !session._p || session._p.src !== "exam" || !loadLastExam()) return "";
+    if (!session || !session._p || session._p.src !== "exam") return "";
+    if (session._p.nav === "history") {
+      return '<a class="btn ghost small exam-back" href="#/history">' + ic("clock") + esc(t("history.title")) + '</a>';
+    }
+    if (!loadLastExam()) return "";
     return '<a class="btn ghost small exam-back" href="#/exam?result=1">' + ic("clock") + esc(t("exam.resultTitle")) + '</a>';
   }
   function quizShell(q) {
@@ -1826,7 +1854,8 @@
   function vExamHome() {
     return '<section class="page-h"><span class="eyebrow">' + ic("clock") + esc(t("exam.title")) + '</span><h1>' + esc(t("exam.title")) + '</h1><p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
       '<div class="hero-cta"><button class="btn primary" data-act="exam-start">' + ic("clock") + esc(t("exam.start")) + '</button>' +
-      '<button class="btn ghost" data-act="real-check">' + ic("check") + esc(t("home.realCheck")) + '</button></div>' +
+      '<button class="btn ghost" data-act="real-check">' + ic("check") + esc(t("home.realCheck")) + '</button>' +
+      '<a class="btn ghost" href="#/history">' + ic("clock") + esc(t("history.title")) + '</a></div>' +
       '<div class="note-card"><h4>' + esc(t("exam.grading")) + '</h4><p>' + esc(t("exam.passLine", { p: "≤ 10" })) + '</p></div></section>';
   }
   function vExam() {
@@ -1866,13 +1895,38 @@
       if (!ok) { err += q.pt; }
       if (a && ((a.sel && a.sel.length) || a.val !== "")) recordAnswer(q, !!ok);
     });
-    session.err = err; session.total = total; saveState(); saveLastExam();
+    session.err = err; session.total = total; saveExamHistory(); saveState(); saveLastExam();
   }
   function examAnswerOk(q, a) {
     if (!a) return false;
     if (q.t === "num") return String(a.val).trim() === String(q.num).trim();
     var sel = a.sel || [];
     return sel.length === q.ans.length && sel.every(function (i) { return q.ans.indexOf(i) >= 0; });
+  }
+  function saveExamHistory() {
+    if (!session || session.mode !== "exam" || !session.graded || session.historySaved) return;
+    var wrong = [];
+    session.ids.forEach(function (id) {
+      var q = BY[id], a = session.answers[id];
+      if (!q || examAnswerOk(q, a)) return;
+      var item = { id: id };
+      if (a) {
+        if (a.sel && a.sel.length) item.sel = a.sel.slice();
+        if (a.val !== undefined && a.val !== "") item.val = String(a.val);
+      }
+      wrong.push(item);
+    });
+    var record = {
+      at: Date.now(),
+      ids: session.ids.slice(),
+      wrong: wrong,
+      err: session.err | 0,
+      total: session.total | 0,
+      pass: (session.err | 0) <= 10,
+      durationMs: session.durationMs | 0
+    };
+    state.exams = mergeExamHistory([record], state.exams || []);
+    session.historySaved = true;
   }
   function vExamResult() {
     saveLastExam();
@@ -1904,6 +1958,38 @@
       '<button class="btn ghost" data-act="exam-start">' + esc(t("exam.newExam")) + '</button></div></section>' +
       (wrong.length ? '<section class="block"><header class="block-h"><h2>' + esc(t("wrong.title")) + '</h2><span class="muted">' + esc(t("wrong.count", { n: wrong.length })) + '</span></header>' +
         '<div class="wrong-list">' + wrongRows + '</div></section>' : '');
+  }
+  function examDate(ms) {
+    var d = new Date(Number(ms) || 0);
+    function p(n) { return (n < 10 ? "0" : "") + n; }
+    return d.getFullYear() + "-" + p(d.getMonth() + 1) + "-" + p(d.getDate()) + " " + p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  function vHistory() {
+    var exams = mergeExamHistory(state.exams, []);
+    var head = '<section class="page-h"><a class="back" href="#/home">' + ic("left") + esc(t("nav.home")) + '</a>' +
+      '<span class="eyebrow">' + ic("clock") + esc(t("history.title")) + '</span><h1>' + esc(t("history.title")) + '</h1>' +
+      '<p class="lede">' + esc(t("history.sub")) + '</p><div class="chips"><span class="chip">' + esc(t("history.count", { n: exams.length })) + '</span></div></section>';
+    if (!exams.length) return head + '<div class="empty card"><h2>' + esc(t("history.empty")) + '</h2><a class="btn primary" href="#/exam">' + esc(t("exam.start")) + '</a></div>';
+    var cards = exams.map(function (e, i) {
+      var wrong = (e.wrong || []).filter(function (x) { return x && x.id && BY[x.id]; });
+      var wrongIds = wrong.map(function (x) { return x.id; });
+      var wrongHref = wrongIds.length ? "#/practice?ids=" + encodeURIComponent(wrongIds.join(",")) + "&src=exam&nav=history" : "";
+      var rows = wrong.map(function (x) {
+        var q = BY[x.id], langs = contentLangs();
+        var text = langText(q, langs[0], "q", -1) || q.qe;
+        return '<a class="qrow" href="' + wrongHref + '&at=' + encodeURIComponent(q.id) + '">' +
+          '<span class="qrow-id">' + esc(q.id) + '</span><span class="qrow-body"><span class="qrow-q">' + esc(text) + '</span></span>' +
+          '<span class="qrow-meta"><span class="chip">' + esc(t("quiz.points", { p: q.pt })) + '</span></span></a>';
+      }).join("");
+      var pass = e.pass === true;
+      return '<article class="card settings-card history-item">' +
+        '<header class="block-h"><h2>#' + (exams.length - i) + ' · ' + esc(examDate(e.at)) + '</h2><span class="chip ' + (pass ? "" : "warn") + '">' + esc(pass ? t("exam.passed") : t("exam.failed")) + '</span></header>' +
+        '<p><strong>' + ((e.total | 0) - (e.err | 0)) + ' / ' + (e.total | 0) + '</strong> · ' + esc(t("exam.errorPoints")) + ': ' + (e.err | 0) + ' · ' + (e.ids || []).length + ' ' + esc(t("cat.questions")) + '</p>' +
+        (wrong.length ? '<div class="q-actions"><a class="btn primary small" href="' + wrongHref + '">' + esc(t("history.reviewWrong")) + ' (' + wrong.length + ')</a></div>' +
+          '<details><summary>' + esc(t("wrong.title")) + ' · ' + esc(t("wrong.count", { n: wrong.length })) + '</summary><div class="wrong-list">' + rows + '</div></details>' : '') +
+        '</article>';
+    }).join("");
+    return head + '<section class="block"><div class="history-list">' + cards + '</div></section>';
   }
 
   /* ---------------- wrong book ---------------- */
@@ -2013,7 +2099,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v122 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v123 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
