@@ -35,7 +35,7 @@ function stubNode() {
   };
 }
 
-function load({ prefs = {}, progress = null, ls = {}, post = null } = {}) {
+function load({ prefs = {}, progress = null, ls = {}, post = null, extras = null } = {}) {
   const nodes = {}, calls = [], bodies = [], inits = [];
   const timers = [];
   const store = Object.assign({}, ls);
@@ -102,6 +102,7 @@ function load({ prefs = {}, progress = null, ls = {}, post = null } = {}) {
       qd: 'Q2', qe: 'Q2', od: ['a', 'b'], oe: ['a', 'b'], ans: [1], pt: 3, t: 'single',
       num: null, img: null, vid: null, cd: '', ce: '' },
   ];
+  if (extras) context.window.__TESTBOEGEN_EXTRA = extras;
   context.window.__boot();
   const click = (act) => {
     const fakeEl = { getAttribute: (k) => (k === 'data-act' ? act : null), classList: { contains: () => false } };
@@ -903,4 +904,27 @@ test('exam history is serialized and merged through cloud progress', () => {
   Q.context.window.testProg.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20, exams: [] });
   Q.context.window.testProg.merge({ q: {}, notes: {}, days: {}, goal: 20, savedAt: 1, exams: [exam] });
   assert.equal(Q.context.window.testProg.getState().exams[0].wrong[0].id, '1.1.01-002');
+});
+
+test('wrong answers on Testbogen-only questions still enter the wrong book', () => {
+  const extra = {
+    id: '1.1.01-900', th: '1.1', ch: '1.1.01', thd: 'T', the: 'T', chd: 'C', che: 'C',
+    qd: 'Q3', qe: 'Q3', od: ['a', 'b'], oe: ['a', 'b'], ans: [0], pt: 4,
+    t: 'single', num: null, img: null, vid: null, cd: '', ce: '',
+  };
+  const P = load({ extras: [extra] });
+  const W = P.context.window.testWrong;
+  W.setState({
+    q: { '1.1.01-900': { a: 1, w: 1, r: 0, last: false, wrong: true, at: 1 } },
+    notes: {}, tr: {}, ai: {}, days: {}, goal: 20,
+  });
+  assert.match(W.wrongView('', '', ''), /Q3/);
+});
+
+test('an exam refuses fixed ids that are not in the catalogue', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setSession(null);
+  W.startExam('bad-set', 1, ['missing-1', 'missing-2']);
+  assert.equal(W.getSession(), null);
 });

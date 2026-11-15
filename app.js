@@ -696,7 +696,10 @@
       if (tx == null || tx === "") continue;
       out += '<span class="ln ln-' + langs[i] + (i === 0 ? " primary" : "") + '">' + esc(tx) + '</span>';
     }
-    return out || '<span class="ln primary">—</span>';
+    if (out) return out;
+    var fb = kind === "q" ? q.qe : kind === "o" ? (q.oe && q.oe[oi]) : q.ce;
+    if (!fb) fb = kind === "q" ? q.qd : kind === "o" ? (q.od && q.od[oi]) : q.cd;
+    return '<span class="ln primary">' + esc(fb || "—") + '</span>';
   }
   /* Picture options (e.g. road-sign questions 1.4.40-013): the catalogue ships
      empty option text because each option IS an image. q.oimg[i] names the local
@@ -848,7 +851,16 @@
     saveState();
     return st.wrong;
   }
-  function wrongCount() { return CAT.filter(function (q) { return state.q[q.id] && state.q[q.id].wrong; }).length; }
+  function wrongPool() {
+    var seen = {}, out = [];
+    CAT.forEach(function (q) { if (!seen[q.id]) { seen[q.id] = 1; out.push(q); } });
+    (window.__TESTBOEGEN_EXTRA || []).forEach(function (q) {
+      if (!q || seen[q.id] || !BY[q.id] || !isClassB(q)) return;
+      seen[q.id] = 1; out.push(q);
+    });
+    return out;
+  }
+  function wrongCount() { return wrongPool().filter(function (q) { return state.q[q.id] && state.q[q.id].wrong; }).length; }
   function answeredCount() { return CAT.filter(function (q) { return state.q[q.id] && state.q[q.id].a > 0; }).length; }
   function notesCount() { var n = 0; for (var k in state.notes) if (state.notes[k] && state.notes[k].text) n++; return n; }
 
@@ -1451,6 +1463,7 @@
 
   function questionCard(q, note) {
     var a = session.answers[q.id] || (session.answers[q.id] = { sel: [], val: "", submitted: false, correct: false });
+    var chLabel = chName(q);
     var meta = '<div class="q-meta">' +
       '<span class="qid">' + esc(q.id) + '</span>' +
       '<span class="chip">' + esc(t("quiz.points", { p: q.pt })) + '</span>' +
@@ -1458,7 +1471,8 @@
       '<button class="iconbtn' + (state.q[q.id] && state.q[q.id].wrong ? " on" : "") + '" data-act="wrong-add" title="' + esc(state.q[q.id] && state.q[q.id].wrong ? t("quiz.inWrong") : t("quiz.addWrong")) + '">' + ic("alert") + '</button>' +
       '<button class="iconbtn' + (state.q[q.id] && state.q[q.id].bm ? " on" : "") + '" data-act="bm" title="' + esc(t("quiz.bookmark")) + '">' + ic("bookmark") + '</button>' +
       '</div>' +
-      '<div class="q-tags"><a href="#/cat/' + encodeURIComponent(q._th) + '">' + esc(thName(q)) + '</a> · <a href="#/cat/' + encodeURIComponent(q._th) + '/' + encodeURIComponent(q._ch) + '">' + esc(chName(q)) + '</a></div>';
+      '<div class="q-tags"><a href="#/cat/' + encodeURIComponent(q._th) + '">' + esc(thName(q)) + '</a>' +
+      (chLabel ? ' · <a href="#/cat/' + encodeURIComponent(q._th) + '/' + encodeURIComponent(q._ch) + '">' + esc(chLabel) + '</a>' : '') + '</div>';
 
     var text = '<div class="q-text">' + stackText(q, "q", -1) + '</div>' + stemHtml(q) + (zhWanted() && !zhOf(q) ? '<p class="muted zh-missing">' + esc(t("quiz.zhMissing")) + '</p>' : "");
 
@@ -1887,9 +1901,16 @@
         '<p class="muted">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
         '<div class="q-actions"><button class="btn primary small" data-act="exam-start-set" data-set="' + i + '">' + esc(t("exam.start")) + '</button></div></article>';
     }
+    var tbs = "";
+    (window.__TESTBOEGEN || []).forEach(function (s) {
+      tbs += '<article class="card settings-card history-item"><header class="block-h"><h2>Testbogen ' + esc(String(s.nr)) + '</h2><span class="chip">' + s.ids.length + '</span></header>' +
+        '<p class="muted">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
+        '<div class="q-actions"><button class="btn primary small" data-act="exam-start-tb" data-tb="' + s.nr + '">' + esc(t("exam.start")) + '</button></div></article>';
+    });
     return '<section class="page-h"><a class="back" href="#/exam">' + ic("left") + esc(t("exam.title")) + '</a>' +
       '<span class="eyebrow">' + ic("layers") + '1–20</span><h1>' + esc(t("exam.title")) + ' 1–20</h1>' +
-      '<p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p></section><section class="block"><div class="history-list">' + cards + '</div></section>';
+      '<p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p></section><section class="block"><div class="history-list">' + cards + '</div></section>' +
+      (tbs ? '<section class="block"><header class="block-h"><h2>Testbögen 1–10</h2><span class="chip">10</span></header><div class="history-list">' + tbs + '</div></section>' : "");
   }
   function vExam() {
     var now = Date.now(); var left = Math.max(0, session.durationMs - (now - session.startedAt));
@@ -2016,7 +2037,9 @@
           '<span class="qrow-meta"><span class="chip">' + esc(t("quiz.points", { p: q.pt })) + '</span></span></a>';
       }).join("");
       var pass = e.pass === true;
-      var setLabel = e.setNo ? ' · ' + esc(t("exam.title")) + ' ' + e.setNo : '';
+      var setLabel = "";
+      if (e.setNo > 100) setLabel = ' · Testbogen ' + (e.setNo - 100);
+      else if (e.setNo) setLabel = ' · ' + esc(t("exam.title")) + ' ' + e.setNo;
       return '<article class="card settings-card history-item">' +
         '<header class="block-h"><h2>#' + (exams.length - i) + setLabel + ' · ' + esc(examDate(e.at)) + '</h2><span class="chip ' + (pass ? "" : "warn") + '">' + esc(pass ? t("exam.passed") : t("exam.failed")) + '</span></header>' +
         '<p><strong>' + ((e.total | 0) - (e.err | 0)) + ' / ' + (e.total | 0) + '</strong> · ' + esc(t("exam.errorPoints")) + ': ' + (e.err | 0) + ' · ' + (e.ids || []).length + ' ' + esc(t("cat.questions")) + '</p>' +
@@ -2030,8 +2053,9 @@
   /* ---------------- wrong book ---------------- */
   function vWrong(th, ch, view, w) {
     var mode = view === "mastered" ? "mastered" : "current";
-    var current = CAT.filter(function (q) { return state.q[q.id] && state.q[q.id].wrong; });
-    var mastered = CAT.filter(function (q) {
+    var pool = wrongPool();
+    var current = pool.filter(function (q) { return state.q[q.id] && state.q[q.id].wrong; });
+    var mastered = pool.filter(function (q) {
       var st = state.q[q.id];
       return st && (st.w | 0) > 0 && !st.wrong;
     });
@@ -2134,7 +2158,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v124 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v125 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2705,6 +2729,7 @@
     if (act === "exam-grade") return gradeAndShowExam();
     if (act === "exam-start") { startExam(); return; }
     if (act === "exam-start-set") { var setNo = parseInt(el.getAttribute("data-set"), 10) || 1; startExam("official-set-" + setNo, setNo); return; }
+    if (act === "exam-start-tb") { var n = parseInt(el.getAttribute("data-tb"), 10); var tb = (window.__TESTBOEGEN || []).find(function (s) { return s.nr === n; }); if (!tb || !tb.ids.length) return; startExam("tb-" + n, 100 + n, tb.ids); return; }
     if (act === "exam-abort") { if (confirm(t("exam.confirmAbort"))) { session = null; go("#/exam"); } return; }
     if (act === "resume-last") {
       e.preventDefault();
@@ -2928,10 +2953,16 @@
     }
     return shuffleSeeded(picked, rng).map(function (q) { return q.id; });
   }
-  function startExam(seed, setNo) {
+  function startExam(seed, setNo, fixedIds) {
     var examSeed = seed || ("x" + Math.random().toString(36).slice(2) + Date.now().toString(36));
-    var ids = buildExamIds(examSeed);
-    if (!ids) return;
+    var ids = fixedIds || buildExamIds(examSeed);
+    if (!ids || !ids.length) return;
+    var seen = {};
+    ids = ids.filter(function (id) {
+      if (!id || seen[id] || !BY[id]) return false;
+      seen[id] = 1; return true;
+    });
+    if (ids.length !== 30) return;
     session = { ids: ids, i: 0, mode: "exam", answers: {}, startedAt: Date.now(), durationMs: 45 * 60 * 1000, graded: false, seed: examSeed, setNo: setNo | 0 };
     if (location.hash === "#/exam") route(); else go("#/exam");
     clearInterval(window.__examTick);
@@ -3014,6 +3045,10 @@
       if (!window.__CATALOG || !window.__CATALOG.length) throw new Error("no catalog");
       CAT_ALL = window.__CATALOG.slice();   // B 照子集；「全部车型」另有一份懒加载
       BY = {}; CAT_ALL.forEach(function (q) { BY[q.id] = q; });
+      if (window.__TESTBOEGEN_EXTRA) window.__TESTBOEGEN_EXTRA.forEach(function (q) {
+        q._th = q.th; q._ch = q.ch;
+        BY[q.id] = q;
+      });
       applyScope();
     } catch (e) {
       if (shell) shell.innerHTML = '<div class="empty card"><h2>' + esc(t("common.loadFail")) + '</h2><p class="muted">' + esc(t("common.loadFailHint")) + '</p><button class="btn primary" onclick="location.reload()">' + esc(t("common.retry")) + '</button></div>';
