@@ -1546,10 +1546,11 @@
     var done = session.ids.filter(function (id) { var x = session.answers[id]; return x && x.submitted; }).length;
     var pct = Math.round(done / session.ids.length * 100);
     var note = (state.notes[q.id] && state.notes[q.id].text) || "";
+    var exitTitle = session._p && session._p.nav === "history" ? t("history.title") : t("quiz.back");
     return '' +
       '<section class="quiz">' +
         '<header class="quiz-top">' +
-          '<button class="iconbtn" data-act="exit" title="' + esc(t("quiz.back")) + '">' + ic("left") + '</button>' +
+          '<button class="iconbtn" data-act="exit" title="' + esc(exitTitle) + '">' + ic("left") + '</button>' +
           '<button class="iconbtn" data-act="home" title="' + esc(t("nav.home")) + '">' + ic("home") + '</button>' +
           '<div class="quiz-title"><strong>' + esc(session.title) + '</strong><span class="muted">' + esc(t("quiz.of", { i: session.i + 1, n: session.ids.length })) + '</span></div>' +
           examResultBackLink() +
@@ -2265,7 +2266,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v129 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v130 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2853,7 +2854,8 @@
       return;
     }
     if (act === "exit") {
-      goBack(session && session.back ? session.back : "#/categories"); return;
+      var exitFallback = session && session._p && session._p.nav === "history" ? "#/history" : (session && session.back ? session.back : "#/categories");
+      goBack(exitFallback); return;
     }
     if (act === "home") { go("#/home"); return; }
     if (act === "restart") { var p = session._p || {}; session = null; go("#/practice?c=" + encodeURIComponent(p.c || "ALL") + "&m=" + (p.m || "all") + "&s=rnd" + (p.n ? "&n=" + encodeURIComponent(p.n) : "")); return; }
