@@ -109,6 +109,9 @@
     if (prev) { navStack.pop(); navCurrent = prev; saveNavStack(); go(prev); return; }
     go(fallback || "#/home");
   }
+  function backButton(fallback) {
+    return '<a class="back" href="' + esc(fallback || "#/home") + '" data-act="back">' + ic("left") + esc(t("nav.back")) + '</a>';
+  }
   function examSnapshot(s) {
     return {
       ids: (s.ids || []).slice(),
@@ -1147,7 +1150,7 @@
     }
     var rules = esc(t("types.rulesText")).replace(/\n/g, "<br>");
     return '<section class="page-h">' +
-        '<a class="back" href="#/home" data-act="back">' + ic("left") + esc(t("nav.back")) + '</a>' +
+        backButton("#/home") +
         '<span class="eyebrow">' + ic("layers") + esc(t("types.eyebrow")) + '</span>' +
         '<h1>' + esc(t("types.title")) + '</h1>' +
         '<div class="hero-cta"><a class="btn ghost small" href="?lang=' + altLang + '#/types">' + esc(altLabel) + '</a></div>' +
@@ -1172,7 +1175,7 @@
       return '<section class="block"><header class="block-h"><h2>' + esc(title) + '</h2></header>' +
         '<div class="tile-grid">' + list.map(function (T, i) { return themeTile(T, start + i); }).join("") + '</div></section>';
     }
-    return '<section class="page-h"><span class="eyebrow">' + ic("grid") + esc(t("cat.title")) + '</span><h1>' + esc(t("cat.title")) + '</h1><p class="lede">' + esc(t("cat.sub")) + '</p></section>' +
+    return '<section class="page-h">' + backButton("#/home") + '<span class="eyebrow">' + ic("grid") + esc(t("cat.title")) + '</span><h1>' + esc(t("cat.title")) + '</h1><p class="lede">' + esc(t("cat.sub")) + '</p></section>' +
       '<section class="block"><header class="block-h"><h2>' + esc(t("types.title")) + '</h2><span class="muted">' + esc(t("types.short")) + '</span></header>' +
         '<div class="hero-cta"><a class="btn primary" href="#/types">' + ic("layers") + esc(t("home.types")) + '</a></div></section>' +
       part(t("cat.part1"), INDEX.part1, 0) + part(t("cat.part2"), INDEX.part2, 3);
@@ -1187,7 +1190,7 @@
     var head = ch ? trName(T.chapters[ch].chd, T.chapters[ch].che, zhChap(ch)) : (T.thz || trName(T.thd, T.the, zhTheme(T.th)));
     return '' +
       '<section class="page-h">' +
-        '<a class="back" href="#/categories" data-act="back">' + ic("left") + esc(t("nav.back")) + '</a>' +
+        backButton("#/categories") +
         '<span class="eyebrow">' + ic("grid") + esc(T.th) + (ch ? " · " + esc(ch) : "") + '</span>' +
         '<h1>' + esc(head) + '</h1>' +
         '<div class="cat-summary">' +
@@ -1991,7 +1994,7 @@
 
   /* ---------------- exam ---------------- */
   function vExamHome() {
-    return '<section class="page-h"><span class="eyebrow">' + ic("clock") + esc(t("exam.title")) + '</span><h1>' + esc(t("exam.title")) + '</h1><p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
+    return '<section class="page-h">' + backButton("#/home") + '<span class="eyebrow">' + ic("clock") + esc(t("exam.title")) + '</span><h1>' + esc(t("exam.title")) + '</h1><p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
       '<div class="hero-cta"><button class="btn primary" data-act="exam-start">' + ic("clock") + esc(t("exam.start")) + '</button>' +
       '<button class="btn ghost" data-act="real-check">' + ic("check") + esc(t("home.realCheck")) + '</button>' +
       '<a class="btn ghost" href="#/sets">' + ic("layers") + '1–20</a>' +
@@ -2011,7 +2014,7 @@
         '<p class="muted">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
         '<div class="q-actions"><button class="btn primary small" data-act="exam-start-tb" data-tb="' + s.nr + '">' + esc(t("exam.start")) + '</button></div></article>';
     });
-    return '<section class="page-h"><a class="back" href="#/exam" data-act="back">' + ic("left") + esc(t("nav.back")) + '</a>' +
+    return '<section class="page-h">' + backButton("#/exam") +
       '<span class="eyebrow">' + ic("layers") + '1–20</span><h1>' + esc(t("exam.title")) + ' 1–20</h1>' +
       '<p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p></section><section class="block"><div class="history-list">' + cards + '</div></section>' +
       (tbs ? '<section class="block"><header class="block-h"><h2>Testbögen 1–10</h2><span class="chip">10</span></header><div class="history-list">' + tbs + '</div></section>' : "");
@@ -2125,7 +2128,7 @@
   }
   function vHistory() {
     var exams = mergeExamHistory(state.exams, []);
-    var head = '<section class="page-h"><a class="back" href="#/home" data-act="back">' + ic("left") + esc(t("nav.back")) + '</a>' +
+    var head = '<section class="page-h">' + backButton("#/home") +
       '<span class="eyebrow">' + ic("clock") + esc(t("history.title")) + '</span><h1>' + esc(t("history.title")) + '</h1>' +
       '<p class="lede">' + esc(t("history.sub")) + '</p><div class="chips"><span class="chip">' + esc(t("history.count", { n: exams.length })) + '</span></div></section>';
     if (!exams.length) return head + '<div class="empty card"><h2>' + esc(t("history.empty")) + '</h2><a class="btn primary" href="#/exam">' + esc(t("exam.start")) + '</a></div>';
@@ -2191,7 +2194,7 @@
         '<a class="btn primary" href="' + esc(lastWrong.href) +
         '" data-act="resume-wrong" data-w="' + esc(countFilter) + '">' + ic("right") + esc(t("nav.resume")) + '</a></div>'
       : "";
-    var head = '<section class="page-h"><span class="eyebrow">' + ic("alert") + esc(t("wrong.title")) + '</span><h1>' + esc(t("wrong.title")) + '</h1><p class="lede">' + esc(t(mode === "mastered" ? "wrong.masteredSub" : "wrong.sub")) + '</p>' +
+    var head = '<section class="page-h">' + backButton("#/home") + '<span class="eyebrow">' + ic("alert") + esc(t("wrong.title")) + '</span><h1>' + esc(t("wrong.title")) + '</h1><p class="lede">' + esc(t(mode === "mastered" ? "wrong.masteredSub" : "wrong.sub")) + '</p>' +
       '<div class="seg" role="group" aria-label="' + esc(t("wrong.title")) + '">' +
         '<a class="seg-btn' + (mode === "current" ? " on" : "") + '" href="' + esc(wrongHref("current", "", "", countFilter)) + '">' + esc(t("wrong.currentTab", { n: current.length })) + '</a>' +
         '<a class="seg-btn' + (mode === "mastered" ? " on" : "") + '" href="' + esc(wrongHref("mastered", "", "", "")) + '">' + esc(t("wrong.masteredTab", { n: mastered.length })) + '</a>' +
@@ -2229,7 +2232,7 @@
   /* ---------------- notes ---------------- */
   function vNotes() {
     var ids = Object.keys(state.notes).filter(function (id) { return state.notes[id] && state.notes[id].text && BY[id]; });
-    var head = '<section class="page-h"><span class="eyebrow">' + ic("note") + esc(t("notes.title")) + '</span><h1>' + esc(t("notes.title")) + '</h1><p class="lede">' + esc(t("notes.sub")) + '</p></section>';
+    var head = '<section class="page-h">' + backButton("#/home") + '<span class="eyebrow">' + ic("note") + esc(t("notes.title")) + '</span><h1>' + esc(t("notes.title")) + '</h1><p class="lede">' + esc(t("notes.sub")) + '</p></section>';
     if (!ids.length) return head + '<div class="empty card"><h2>' + esc(t("notes.empty")) + '</h2><a class="btn primary" href="#/categories">' + esc(t("notes.emptyAction")) + '</a></div>';
     return head + '<div class="muted note-count">' + esc(t("notes.count", { n: ids.length })) + ' · ' + esc(t("quiz.noteBudget", { used: progNoteBytes(state.notes), max: PROG_NOTE_BUDGET })) + '</div><div class="note-list">' + ids.map(function (id) {
       var q = BY[id];
@@ -2245,7 +2248,7 @@
 
   function vSettings() {
     var img = CAT.filter(function (q) { return q.img; }).length;
-    return '<section class="page-h"><span class="eyebrow">' + ic("cog") + esc(t("settings.title")) + '</span><h1>' + esc(t("settings.title")) + '</h1></section>' +
+    return '<section class="page-h">' + backButton("#/home") + '<span class="eyebrow">' + ic("cog") + esc(t("settings.title")) + '</span><h1>' + esc(t("settings.title")) + '</h1></section>' +
       card(t("settings.appearance"),
         langField(t("settings.uiLang"), "ui", uiOptions(), prefs.uiLang) +
         langField(t("settings.contentLang"), "content", contentOptions(), prefs.contentLang) +
@@ -2262,7 +2265,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v128 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v129 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2337,7 +2340,7 @@
   }
   function vAdmin() {
     var ai = window.AI.cfg();
-    return '<section class="page-h"><span class="eyebrow">' + ic("cog") + esc(t("admin.title")) + '</span><h1>' + esc(t("admin.title")) + '</h1><p class="lede">' + esc(t("admin.hint")) + '</p></section>' +
+    return '<section class="page-h">' + backButton("#/home") + '<span class="eyebrow">' + ic("cog") + esc(t("admin.title")) + '</span><h1>' + esc(t("admin.title")) + '</h1><p class="lede">' + esc(t("admin.hint")) + '</p></section>' +
       card(t("admin.cache"),
         '<div class="q-actions"><button class="btn ghost small" data-act="img-cache">' + ic("img") + esc(t("img.cacheNow")) + '</button><span class="muted" data-role="img-status">' + esc(imgStatusText()) + '</span></div>' +
         '<div class="q-actions" style="margin-top:12px"><button class="btn ghost small" data-act="vid-cache">' + ic("play") + esc(t("vid.cacheNow")) + '</button><span class="muted" data-role="vid-status">' + esc(vidStatusText()) + '</span></div>') +
