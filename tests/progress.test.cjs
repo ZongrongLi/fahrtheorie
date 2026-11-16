@@ -983,3 +983,22 @@ test('submitting an exam clears its resumable draft', () => {
   W.gradeExam();
   assert.equal(P.store['dtt.exam.active.v1'], undefined);
 });
+
+test('home exposes an explicit resume button for an unfinished exam', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setSession({
+    ids: ['1.1.01-001', '1.1.01-002'],
+    i: 0,
+    mode: 'exam',
+    answers: {},
+    startedAt: Date.now() - 1000,
+    durationMs: 45 * 60 * 1000,
+    graded: false,
+  });
+  W.saveActiveExam();
+  W.setSession(null);
+  const html = W.homeView();
+  assert.match(html, /Resume unfinished exam/);
+  assert.match(html, /href="#\/exam"/);
+});

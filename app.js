@@ -130,13 +130,20 @@
   function clearActiveExam() {
     try { localStorage.removeItem(ACTIVE_EXAM_KEY); } catch (e) {}
   }
-  function restoreActiveExam() {
-    if (session && session.mode === "exam" && !session.graded) return true;
+  function activeExamDraft() {
     try {
       var raw = localStorage.getItem(ACTIVE_EXAM_KEY);
       var saved = raw ? JSON.parse(raw) : null;
-      if (!saved || !Array.isArray(saved.ids) || !saved.ids.length || !saved.answers) return false;
-      if (!saved.ids.every(function (id) { return !!BY[id]; })) return false;
+      if (!saved || !Array.isArray(saved.ids) || !saved.ids.length || !saved.answers) return null;
+      if (!saved.ids.every(function (id) { return !!BY[id]; })) return null;
+      return saved;
+    } catch (e) { return null; }
+  }
+  function restoreActiveExam() {
+    if (session && session.mode === "exam" && !session.graded) return true;
+    try {
+      var saved = activeExamDraft();
+      if (!saved) return false;
       session = {
         ids: saved.ids.slice(),
         i: Math.max(0, Math.min(saved.ids.length - 1, saved.i | 0)),
@@ -988,6 +995,7 @@
   /* ---------------- views: home ---------------- */
   function vHome() {
     var total = CAT.length, ans = answeredCount(), wr = wrongCount(), nt = notesCount();
+    var examDraft = activeExamDraft();
     var acc = ans ? Math.round(CAT.reduce(function (s, q) { var st = state.q[q.id]; return s + (st && st.a ? (st.r / st.a) : 0); }, 0) / ans * 100) : 0;
     var withImg = CAT.filter(function (q) { return q.img; }).length;
     var streak = computeStreak();
@@ -1021,6 +1029,9 @@
           '<div class="streak-sub">' + esc(t("home.dueToday")) + ' · ' + goalDone + '/' + state.goal + '</div>' +
         '</aside>' +
       '</section>' +
+      (examDraft ? '<section class="block"><div class="note-card"><h4>' + esc(t("exam.title")) + '</h4>' +
+        '<p class="muted">' + esc(t("exam.resumeDraft")) + '</p>' +
+        '<div class="q-actions"><a class="btn primary" href="#/exam">' + ic("clock") + esc(t("exam.resumeDraft")) + '</a></div></div></section>' : '') +
       '<section class="stats">' +
         stat(t("home.answered"), ans + " / " + total, ans / total * 100) +
         stat(t("home.accuracy"), acc + "%", acc) +
@@ -2218,7 +2229,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v126 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v127 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------

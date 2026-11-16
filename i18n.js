@@ -165,6 +165,7 @@ window.I18N = {
     "notes.count": "{n} notes",
     "notes.jump": "Jump to question",
     "exam.title": "Mock exam",
+    "exam.resumeDraft": "Resume unfinished exam",
     "exam.sub": "Official Class B structure: 20 basic + 10 class-specific questions, 110 points, timed, graded at the end.",
     "exam.start": "Start mock exam",
     "exam.time": "Time left",
