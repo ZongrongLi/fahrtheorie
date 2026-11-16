@@ -22,6 +22,7 @@ const instrumented = appSource.replace(marker,
   '    historyView: vHistory,\n' +
   '    restoreLastExam: restoreLastExam, saveActiveExam: saveActiveExam,\n' +
   '    restoreActiveExam: restoreActiveExam, clearActiveExam: clearActiveExam, route: route,\n' +
+  '    testNav: { track: trackNavigation, back: goBack, stack: function () { return navStack.slice(); }, current: function () { return navCurrent; } },\n' +
   '    homeView: vHome, resumeQuestion: resumeQuestion, lastAnswered: lastAnswered,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
   '    getSession: function () { return session; }, setSession: function (s) { session = s; } };\n' + marker);
@@ -1001,4 +1002,22 @@ test('home exposes an explicit resume button for an unfinished exam', () => {
   const html = W.homeView();
   assert.match(html, /Resume unfinished exam/);
   assert.match(html, /href="#\/exam"/);
+});
+
+test('the in-app back action walks the navigation stack in exact reverse order', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  const nav = W.testNav;
+  P.context.history.back = undefined;
+  P.context.location.hash = '#/home';
+  nav.track();
+  P.context.location.hash = '#/categories';
+  nav.track();
+  P.context.location.hash = '#/types';
+  nav.track();
+  nav.back();
+  assert.equal(P.context.location.hash, '#/categories');
+  nav.track();
+  nav.back();
+  assert.equal(P.context.location.hash, '#/home');
 });

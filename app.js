@@ -77,6 +77,38 @@
   var session = null, lastExam = null, aiPanelOpen = {}, aiHist = {}, lastHash = "#/home", pendingGoogleCredential = "";
   var LAST_EXAM_KEY = "dtt.exam.last.v1";
   var ACTIVE_EXAM_KEY = "dtt.exam.active.v1";
+  var NAV_STACK_KEY = "dtt.nav.stack.v1";
+  var NAV_CURRENT_KEY = "dtt.nav.current.v1";
+  var navStack = [], navCurrent = "";
+  try {
+    var storedNav = JSON.parse(sessionStorage.getItem(NAV_STACK_KEY) || "[]");
+    if (Array.isArray(storedNav)) navStack = storedNav.filter(function (h) { return typeof h === "string" && h.indexOf("#/") === 0; }).slice(-50);
+    navCurrent = sessionStorage.getItem(NAV_CURRENT_KEY) || "";
+  } catch (e) {}
+  function saveNavStack() {
+    try {
+      sessionStorage.setItem(NAV_STACK_KEY, JSON.stringify(navStack.slice(-50)));
+      sessionStorage.setItem(NAV_CURRENT_KEY, navCurrent);
+    } catch (e) {}
+  }
+  function trackNavigation() {
+    var h = location.hash || "#/home";
+    if (h === navCurrent) return;
+    if (navStack.length && navStack[navStack.length - 1] === h) navStack.pop();
+    else if (navCurrent) navStack.push(navCurrent);
+    navStack = navStack.slice(-50);
+    navCurrent = h;
+    saveNavStack();
+  }
+  function goBack(fallback) {
+    var prev = navStack.length ? navStack[navStack.length - 1] : "";
+    if (prev && typeof history !== "undefined" && typeof history.back === "function") {
+      history.back();
+      return;
+    }
+    if (prev) { navStack.pop(); navCurrent = prev; saveNavStack(); go(prev); return; }
+    go(fallback || "#/home");
+  }
   function examSnapshot(s) {
     return {
       ids: (s.ids || []).slice(),
@@ -946,6 +978,7 @@
   /* ---------------- routing ---------------- */
   function go(hash) { location.hash = hash; }
   function route() {
+    trackNavigation();
     if (session && session.mode === "exam" && !session.graded) saveActiveExam();
     var full = (location.hash || "#/home").replace(/^#\/?/, "");
     var qi = full.indexOf("?");
@@ -1114,7 +1147,7 @@
     }
     var rules = esc(t("types.rulesText")).replace(/\n/g, "<br>");
     return '<section class="page-h">' +
-        '<a class="back" href="#/home">' + ic("left") + esc(t("nav.home")) + '</a>' +
+        '<a class="back" href="#/home" data-act="back">' + ic("left") + esc(t("nav.back")) + '</a>' +
         '<span class="eyebrow">' + ic("layers") + esc(t("types.eyebrow")) + '</span>' +
         '<h1>' + esc(t("types.title")) + '</h1>' +
         '<div class="hero-cta"><a class="btn ghost small" href="?lang=' + altLang + '#/types">' + esc(altLabel) + '</a></div>' +
@@ -1154,7 +1187,7 @@
     var head = ch ? trName(T.chapters[ch].chd, T.chapters[ch].che, zhChap(ch)) : (T.thz || trName(T.thd, T.the, zhTheme(T.th)));
     return '' +
       '<section class="page-h">' +
-        '<a class="back" href="#/categories">' + ic("left") + esc(t("cat.title")) + '</a>' +
+        '<a class="back" href="#/categories" data-act="back">' + ic("left") + esc(t("nav.back")) + '</a>' +
         '<span class="eyebrow">' + ic("grid") + esc(T.th) + (ch ? " · " + esc(ch) : "") + '</span>' +
         '<h1>' + esc(head) + '</h1>' +
         '<div class="cat-summary">' +
@@ -1978,7 +2011,7 @@
         '<p class="muted">' + esc(t("exam.sub", { n: 30 })) + '</p>' +
         '<div class="q-actions"><button class="btn primary small" data-act="exam-start-tb" data-tb="' + s.nr + '">' + esc(t("exam.start")) + '</button></div></article>';
     });
-    return '<section class="page-h"><a class="back" href="#/exam">' + ic("left") + esc(t("exam.title")) + '</a>' +
+    return '<section class="page-h"><a class="back" href="#/exam" data-act="back">' + ic("left") + esc(t("nav.back")) + '</a>' +
       '<span class="eyebrow">' + ic("layers") + '1–20</span><h1>' + esc(t("exam.title")) + ' 1–20</h1>' +
       '<p class="lede">' + esc(t("exam.sub", { n: 30 })) + '</p></section><section class="block"><div class="history-list">' + cards + '</div></section>' +
       (tbs ? '<section class="block"><header class="block-h"><h2>Testbögen 1–10</h2><span class="chip">10</span></header><div class="history-list">' + tbs + '</div></section>' : "");
@@ -2092,7 +2125,7 @@
   }
   function vHistory() {
     var exams = mergeExamHistory(state.exams, []);
-    var head = '<section class="page-h"><a class="back" href="#/home">' + ic("left") + esc(t("nav.home")) + '</a>' +
+    var head = '<section class="page-h"><a class="back" href="#/home" data-act="back">' + ic("left") + esc(t("nav.back")) + '</a>' +
       '<span class="eyebrow">' + ic("clock") + esc(t("history.title")) + '</span><h1>' + esc(t("history.title")) + '</h1>' +
       '<p class="lede">' + esc(t("history.sub")) + '</p><div class="chips"><span class="chip">' + esc(t("history.count", { n: exams.length })) + '</span></div></section>';
     if (!exams.length) return head + '<div class="empty card"><h2>' + esc(t("history.empty")) + '</h2><a class="btn primary" href="#/exam">' + esc(t("exam.start")) + '</a></div>';
@@ -2229,7 +2262,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v127 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v128 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2791,6 +2824,7 @@
     if (act === "notif-read-all") { notifReadAll(); return; }
     if (act === "notif-open") { notifOpen(el.getAttribute("data-qid"), el.getAttribute("data-id")); return; }
     if (act === "toggle-theme") { prefs.theme = prefs.theme === "dark" ? "light" : "dark"; savePrefs(); applyTheme(); renderTopbar(); return; }
+    if (act === "back") { e.preventDefault(); goBack(); return; }
     if (act === "opt") return onOpt(parseInt(el.getAttribute("data-i"), 10));
     if (act === "submit") return submitCurrent();
     if (act === "reveal") return revealCurrent();
@@ -2816,11 +2850,7 @@
       return;
     }
     if (act === "exit") {
-      var cq = (session && session.ids) ? BY[session.ids[session.i]] : null;
-      // came from a category question list -> return exactly there; otherwise -> this question's category list
-      if (session && session.back && session.back.indexOf("#/cat/") === 0) { go(session.back); return; }
-      if (cq && cq._th) { go("#/cat/" + encodeURIComponent(cq._th) + "/" + encodeURIComponent(cq._ch)); return; }
-      go("#/categories"); return;
+      goBack(session && session.back ? session.back : "#/categories"); return;
     }
     if (act === "home") { go("#/home"); return; }
     if (act === "restart") { var p = session._p || {}; session = null; go("#/practice?c=" + encodeURIComponent(p.c || "ALL") + "&m=" + (p.m || "all") + "&s=rnd" + (p.n ? "&n=" + encodeURIComponent(p.n) : "")); return; }
