@@ -20,7 +20,8 @@ const instrumented = appSource.replace(marker,
   '    gradeExam: gradeExam, toggleWrong: toggleWrong, wrongView: vWrong,\n' +
   '    startExam: startExam, examResult: vExamResult, examBack: examResultBackLink,\n' +
   '    historyView: vHistory,\n' +
-  '    restoreLastExam: restoreLastExam,\n' +
+  '    restoreLastExam: restoreLastExam, saveActiveExam: saveActiveExam,\n' +
+  '    restoreActiveExam: restoreActiveExam, clearActiveExam: clearActiveExam, route: route,\n' +
   '    homeView: vHome, resumeQuestion: resumeQuestion, lastAnswered: lastAnswered,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
   '    getSession: function () { return session; }, setSession: function (s) { session = s; } };\n' + marker);
@@ -927,4 +928,58 @@ test('an exam refuses fixed ids that are not in the catalogue', () => {
   W.setSession(null);
   W.startExam('bad-set', 1, ['missing-1', 'missing-2']);
   assert.equal(W.getSession(), null);
+});
+
+test('an unfinished exam survives leaving the exam route and restores exactly', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  const startedAt = Date.now() - 5000;
+  W.setSession({
+    ids: ['1.1.01-001', '1.1.01-002'],
+    i: 1,
+    mode: 'exam',
+    answers: {
+      '1.1.01-001': { sel: [0], val: '', submitted: true, correct: true },
+      '1.1.01-002': { sel: [], val: '42', submitted: false, correct: false },
+    },
+    startedAt,
+    durationMs: 45 * 60 * 1000,
+    graded: false,
+    seed: 'draft-test',
+    setNo: 7,
+  });
+  P.context.location.hash = '#/home';
+  W.route();
+  assert.equal(W.getSession(), null, 'leaving the exam route clears the in-memory session');
+
+  P.context.location.hash = '#/exam';
+  W.route();
+  const restored = W.getSession();
+  assert.ok(restored, 'returning to the exam route restores the draft');
+  assert.equal(restored.i, 1, 'the current question index is preserved');
+  assert.equal(restored.setNo, 7, 'the exam set number is preserved');
+  assert.equal(restored.startedAt, startedAt, 'the original timer start is preserved');
+  assert.equal(restored.answers['1.1.01-001'].sel.join(','), '0');
+  assert.equal(restored.answers['1.1.01-002'].val, '42');
+});
+
+test('submitting an exam clears its resumable draft', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  W.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20, exams: [] });
+  W.setSession({
+    ids: ['1.1.01-001', '1.1.01-002'],
+    i: 0,
+    mode: 'exam',
+    answers: {
+      '1.1.01-001': { sel: [0], val: '', submitted: true, correct: true },
+      '1.1.01-002': { sel: [0], val: '', submitted: true, correct: false },
+    },
+    startedAt: Date.now() - 1000,
+    durationMs: 45 * 60 * 1000,
+    graded: false,
+  });
+  W.saveActiveExam();
+  W.gradeExam();
+  assert.equal(P.store['dtt.exam.active.v1'], undefined);
 });

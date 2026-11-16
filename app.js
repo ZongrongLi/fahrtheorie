@@ -76,13 +76,14 @@
   window.__explManual = false;   // per-question/settings override of the explanation language (session only)
   var session = null, lastExam = null, aiPanelOpen = {}, aiHist = {}, lastHash = "#/home", pendingGoogleCredential = "";
   var LAST_EXAM_KEY = "dtt.exam.last.v1";
+  var ACTIVE_EXAM_KEY = "dtt.exam.active.v1";
   function examSnapshot(s) {
     return {
       ids: (s.ids || []).slice(),
       answers: JSON.parse(JSON.stringify(s.answers || {})),
       err: s.err | 0,
       total: s.total | 0,
-      startedAt: s.startedAt | 0,
+      startedAt: Number(s.startedAt) || 0,
       durationMs: s.durationMs | 0,
       graded: true,
       mode: "exam",
@@ -111,6 +112,45 @@
     session = examSnapshot(saved);
     return true;
   }
+  function activeExamSnapshot(s) {
+    return {
+      ids: (s.ids || []).slice(),
+      answers: JSON.parse(JSON.stringify(s.answers || {})),
+      i: s.i | 0,
+      startedAt: Number(s.startedAt) || 0,
+      durationMs: s.durationMs | 0,
+      seed: s.seed || "",
+      setNo: s.setNo | 0
+    };
+  }
+  function saveActiveExam() {
+    if (!session || session.mode !== "exam" || session.graded) return;
+    try { localStorage.setItem(ACTIVE_EXAM_KEY, JSON.stringify(activeExamSnapshot(session))); } catch (e) {}
+  }
+  function clearActiveExam() {
+    try { localStorage.removeItem(ACTIVE_EXAM_KEY); } catch (e) {}
+  }
+  function restoreActiveExam() {
+    if (session && session.mode === "exam" && !session.graded) return true;
+    try {
+      var raw = localStorage.getItem(ACTIVE_EXAM_KEY);
+      var saved = raw ? JSON.parse(raw) : null;
+      if (!saved || !Array.isArray(saved.ids) || !saved.ids.length || !saved.answers) return false;
+      if (!saved.ids.every(function (id) { return !!BY[id]; })) return false;
+      session = {
+        ids: saved.ids.slice(),
+        i: Math.max(0, Math.min(saved.ids.length - 1, saved.i | 0)),
+        mode: "exam",
+        answers: saved.answers,
+        startedAt: Number(saved.startedAt) || Date.now(),
+        durationMs: Number(saved.durationMs) || 45 * 60 * 1000,
+        graded: false,
+        seed: saved.seed || "",
+        setNo: saved.setNo | 0
+      };
+      return true;
+    } catch (e) { return false; }
+  }
   function navFromHash(h) {
     var v = String(h || "").replace(/^#\/?/, "").split(/[/?]/)[0];
     if (v === "cat") return "categories";
@@ -119,7 +159,11 @@
   }
 
   function load(k, d) { try { var v = JSON.parse(localStorage.getItem(k)); return v && typeof v === "object" ? Object.assign(d, v) : d; } catch (e) { return d; } }
-  function saveState() { try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e) {} fsScheduleWrite(); progPush(); }
+  function saveState() {
+    try { localStorage.setItem("dtt.state.v1", JSON.stringify(state)); } catch (e) {}
+    if (session && session.mode === "exam" && !session.graded) saveActiveExam();
+    fsScheduleWrite(); progPush();
+  }
   /* ---------------- progress cloud sync（只收 B 照） ----------------
      登录后做题进度跟着账号走：q（含错题/书签）按 at 取新，notes 按 at 取新，
      days 按天取大，goal 按 savedAt 取新 —— 多设备同时用也不丢。tr/ai 缓存
@@ -476,8 +520,11 @@
       .catch(function () { progSync.state = "failed"; progPaintStatus(); });
   }
   if (typeof document !== "undefined" && document.addEventListener) {
-    document.addEventListener("pagehide", function () { progPush(true, true); });
-    document.addEventListener("visibilitychange", function () { progPush(true, document.hidden); });
+    document.addEventListener("pagehide", function () { saveActiveExam(); progPush(true, true); });
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden) saveActiveExam();
+      progPush(true, document.hidden);
+    });
   }
   if (typeof window !== "undefined" && window.addEventListener) {
     window.addEventListener("online", function () { progRetryN = 0; progPush(true); });
@@ -892,6 +939,7 @@
   /* ---------------- routing ---------------- */
   function go(hash) { location.hash = hash; }
   function route() {
+    if (session && session.mode === "exam" && !session.graded) saveActiveExam();
     var full = (location.hash || "#/home").replace(/^#\/?/, "");
     var qi = full.indexOf("?");
     var path = qi >= 0 ? full.slice(0, qi) : full;
@@ -917,7 +965,11 @@
     else if (view === "sets") app.innerHTML = vExamSets();
     else if (view === "exam") {
       if (queryArgs.result === "1" && restoreLastExam()) app.innerHTML = vExamResult();
-      else app.innerHTML = session && session.mode === "exam" ? vExam() : vExamHome();
+      else {
+        if (!session || session.mode !== "exam") restoreActiveExam();
+        app.innerHTML = session && session.mode === "exam" ? vExam() : vExamHome();
+        if (session && session.mode === "exam" && !session.graded) startExamTimer();
+      }
     }
     else if (view === "settings") app.innerHTML = vSettings();
     else if (view === "admin") app.innerHTML = vAdmin();
@@ -1883,7 +1935,15 @@
     var k = a.sel.indexOf(i); if (k >= 0) a.sel.splice(k, 1); else a.sel.push(i);
     rerenderQuiz();
   }
-  function rerenderQuiz() { syncAt(); var app = document.getElementById("view"); app.innerHTML = session.mode === "exam" ? vExam() : vQuiz(); if (session.mode !== "exam") preloadNeighbours(); mountMedia(); try { if (session.mode !== "exam" && session.ids[session.i]) discussLoad(session.ids[session.i]); } catch (e) {} }
+  function rerenderQuiz() {
+    syncAt();
+    var app = document.getElementById("view");
+    app.innerHTML = session.mode === "exam" ? vExam() : vQuiz();
+    if (session.mode === "exam" && !session.graded) saveActiveExam();
+    if (session.mode !== "exam") preloadNeighbours();
+    mountMedia();
+    try { if (session.mode !== "exam" && session.ids[session.i]) discussLoad(session.ids[session.i]); } catch (e) {}
+  }
 
   /* ---------------- exam ---------------- */
   function vExamHome() {
@@ -1949,7 +2009,7 @@
       if (!ok) { err += q.pt; }
       if (a && ((a.sel && a.sel.length) || a.val !== "")) recordAnswer(q, !!ok);
     });
-    session.err = err; session.total = total; saveExamHistory(); saveState(); saveLastExam();
+    session.err = err; session.total = total; clearActiveExam(); saveExamHistory(); saveState(); saveLastExam();
   }
   function examAnswerOk(q, a) {
     if (!a) return false;
@@ -2158,7 +2218,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v125 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v126 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2730,7 +2790,7 @@
     if (act === "exam-start") { startExam(); return; }
     if (act === "exam-start-set") { var setNo = parseInt(el.getAttribute("data-set"), 10) || 1; startExam("official-set-" + setNo, setNo); return; }
     if (act === "exam-start-tb") { var n = parseInt(el.getAttribute("data-tb"), 10); var tb = (window.__TESTBOEGEN || []).find(function (s) { return s.nr === n; }); if (!tb || !tb.ids.length) return; startExam("tb-" + n, 100 + n, tb.ids); return; }
-    if (act === "exam-abort") { if (confirm(t("exam.confirmAbort"))) { session = null; go("#/exam"); } return; }
+    if (act === "exam-abort") { if (confirm(t("exam.confirmAbort"))) { clearActiveExam(); session = null; go("#/exam"); } return; }
     if (act === "resume-last") {
       e.preventDefault();
       var rq = resumeQuestion() || CAT[0];
@@ -2857,7 +2917,11 @@
   function currentQ() { return BY[session.ids[session.i]]; }
 
   document.addEventListener("input", function (e) {
-    if (e.target.matches('[data-role="numinput"]')) { var q = currentQ(); if (q && session.answers[q.id]) session.answers[q.id].val = e.target.value; }
+    if (e.target.matches('[data-role="numinput"]')) {
+      var q = currentQ();
+      if (q && session.answers[q.id]) session.answers[q.id].val = e.target.value;
+      if (session && session.mode === "exam" && !session.graded) saveActiveExam();
+    }
     if (e.target.matches('[data-role="adm-q"]')) { admQ = (e.target.value || "").trim().toLowerCase(); admPaintRows(); }
   });
   document.addEventListener("submit", function (e) {
@@ -2963,10 +3027,16 @@
       seen[id] = 1; return true;
     });
     if (ids.length !== 30) return;
+    clearActiveExam();
     session = { ids: ids, i: 0, mode: "exam", answers: {}, startedAt: Date.now(), durationMs: 45 * 60 * 1000, graded: false, seed: examSeed, setNo: setNo | 0 };
+    saveActiveExam();
     if (location.hash === "#/exam") route(); else go("#/exam");
+    startExamTimer();
+  }
+  function startExamTimer() {
     clearInterval(window.__examTick);
     window.__examTick = setInterval(function () {
+      if (!session || session.mode !== "exam" || session.graded) { clearInterval(window.__examTick); return; }
       var tl = document.querySelector('[data-role="timer"]'); if (!tl) { clearInterval(window.__examTick); return; }
       var left = Math.max(0, session.durationMs - (Date.now() - session.startedAt));
       tl.innerHTML = ic("clock") + String(Math.floor(left / 60000)).padStart(2, "0") + ":" + String(Math.floor(left % 60000 / 1000)).padStart(2, "0");
