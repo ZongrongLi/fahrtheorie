@@ -982,6 +982,11 @@
     INDEX.part2 = INDEX.themes.filter(function (x) { return x.part === 2; });
   }
   function qsIn(th, ch) { return CAT.filter(function (q) { return q._th === th && (!ch || q._ch === ch); }); }
+  function fivePointPracticeIds() {
+    return CAT_ALL.filter(function (q) {
+      return isClassB(q) && q.pt === 5 && q.th !== "1.3";
+    }).map(function (q) { return q.id; });
+  }
 
   /* ---------------- routing ---------------- */
   function go(hash) { location.hash = hash; }
@@ -1176,11 +1181,16 @@
 
   /* ---------------- views: categories ---------------- */
   function vCategories() {
+    var fiveIds = fivePointPracticeIds();
+    var fiveHref = "#/practice?ids=" + encodeURIComponent(fiveIds.join(",")) + "&src=five&nav=categories";
     function part(title, list, start) {
       return '<section class="block"><header class="block-h"><h2>' + esc(title) + '</h2></header>' +
         '<div class="tile-grid">' + list.map(function (T, i) { return themeTile(T, start + i); }).join("") + '</div></section>';
     }
     return '<section class="page-h">' + backButton("#/home") + '<span class="eyebrow">' + ic("grid") + esc(t("cat.title")) + '</span><h1>' + esc(t("cat.title")) + '</h1><p class="lede">' + esc(t("cat.sub")) + '</p></section>' +
+      '<section class="block"><header class="block-h"><h2>' + esc(t("five.title")) + '</h2><span class="muted">' + esc(t("five.short")) + '</span></header>' +
+        '<article class="card settings-card"><p>' + esc(t("five.lede", { n: fiveIds.length })) + '</p>' +
+        '<div class="q-actions"><a class="btn primary" href="' + fiveHref + '">' + ic("right") + esc(t("five.practice", { n: fiveIds.length })) + '</a></div></article></section>' +
       '<section class="block"><header class="block-h"><h2>' + esc(t("types.title")) + '</h2><span class="muted">' + esc(t("types.short")) + '</span></header>' +
         '<div class="hero-cta"><a class="btn primary" href="#/types">' + ic("layers") + esc(t("home.types")) + '</a></div></section>' +
       part(t("cat.part1"), INDEX.part1, 0) + part(t("cat.part2"), INDEX.part2, 3);
@@ -1233,7 +1243,7 @@
       var limit = Number(p.n) || 0;
       if (limit > 0) ids = ids.slice(0, Math.min(ids.length, Math.floor(limit)));
     }
-    var ttl = p.src === "wrong" ? t("nav.wrong") : p.src === "exam" ? t("exam.title") : p.src === "real" ? t("home.realCheck") : p.src === "types" ? t("types.title") : sessionTitle(p);
+    var ttl = p.src === "wrong" ? t("nav.wrong") : p.src === "exam" ? t("exam.title") : p.src === "real" ? t("home.realCheck") : p.src === "types" ? t("types.title") : p.src === "five" ? t("five.title") : sessionTitle(p);
     openSession(ids, { c: p.c, ch: p.ch, m: p.m, mode: "normal", key: key, title: ttl });
     session._p = p;
     if (p.at) { var ix = session.ids.indexOf(p.at); if (ix >= 0) session.i = ix; }
@@ -2273,7 +2283,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v132 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v133 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------

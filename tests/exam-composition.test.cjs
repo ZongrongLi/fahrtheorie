@@ -7,7 +7,8 @@ const appSource = fs.readFileSync(require.resolve('../app.js'), 'utf8');
 const marker = '  window.__boot = boot;';
 assert.equal(appSource.split(marker).length, 2, 'boot marker must be unique');
 const instrumented = appSource.replace(marker,
-  '  window.testExam = { buildExamIds: buildExamIds, examPool: examPool, rules: EXAM_RULES };\n' + marker);
+  '  window.testExam = { buildExamIds: buildExamIds, examPool: examPool, rules: EXAM_RULES };\n' +
+  '  window.testFive = { ids: fivePointPracticeIds, categories: vCategories };\n' + marker);
 
 function stubNode() {
   return {
@@ -111,4 +112,20 @@ test('the 20 fixed sets are deterministic and differ from one another', () => {
   const second = window.testExam.buildExamIds('official-set-2').join(',');
   assert.equal(first, again, 'the same set number must produce the same questions');
   assert.notEqual(first, second, 'different set numbers must produce different sets');
+});
+
+test('the non-right-of-way five-point focus contains exactly 97 Class B questions', () => {
+  const window = load();
+  const by = {};
+  window.__CATALOG.forEach((q) => { by[q.id] = q; });
+  const ids = window.testFive.ids();
+  assert.equal(ids.length, 97);
+  assert.equal(new Set(ids).size, 97, 'the focus must not repeat questions');
+  for (const id of ids) {
+    assert.equal(by[id].pt, 5, `${id} must be worth five points`);
+    assert.notEqual(by[id].th, '1.3', `${id} must be outside the right-of-way chapter`);
+  }
+  const html = window.testFive.categories();
+  assert.match(html, /src=five&nav=categories/);
+  assert.match(html, /97/);
 });
