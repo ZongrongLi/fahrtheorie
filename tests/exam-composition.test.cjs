@@ -119,19 +119,29 @@ test('the non-right-of-way five-point focus removes generic other-user-mistake g
   const by = {};
   window.__CATALOG.forEach((q) => { by[q.id] = q; });
   const ids = window.testFive.ids();
-  assert.equal(ids.length, 82);
-  assert.equal(new Set(ids).size, 82, 'the focus must not repeat questions');
+  assert.equal(ids.length, 60);
+  assert.equal(new Set(ids).size, 60, 'the focus must not repeat questions');
   for (const id of [
-    '1.1.02-005', '1.1.02-040-M', '1.1.02-041-M', '1.1.02-115',
-    '1.1.05-105', '1.1.07-009', '1.1.07-017', '1.1.07-146',
-    '1.2.06-004', '1.2.09-136-M', '1.2.20-109-M', '1.2.20-111-M',
-    '1.4.41-109', '2.1.07-111', '2.1.07-114-M',
+    '1.1.02-005', '1.1.02-009-B', '1.1.02-040-M', '1.1.02-041-M',
+    '1.1.02-042-M', '1.1.02-043-M', '1.1.02-048-M', '1.1.02-050-M',
+    '1.1.02-112', '1.1.02-113', '1.1.02-115', '1.1.02-117',
+    '1.1.02-119', '1.1.02-134-M', '1.1.02-136-M', '1.1.02-137-M',
+    '1.1.02-202-M', '1.1.06-104', '1.1.06-105',
+    '1.1.07-009', '1.1.07-017', '1.1.07-136', '1.1.07-146',
+    '1.1.07-152-M', '1.1.07-165-M', '1.2.06-004', '1.2.09-127',
+    '1.2.09-136-M', '1.2.09-137-M', '1.2.11-110-M',
+    '1.4.40-006', '1.4.41-008', '1.4.41-109',
+    '2.1.05-104-M', '2.1.07-111', '2.1.07-112', '2.1.07-114-M',
   ]) assert.equal(ids.includes(id), false, `${id} must be excluded from the focus`);
+  for (const id of [
+    '1.1.03-118', '1.1.05-105', '1.1.06-124', '1.1.07-021',
+    '1.2.20-109-M', '1.2.20-111-M', '2.1.07-113-M',
+  ]) assert.equal(ids.includes(id), true, `${id} contains a concrete rule and must stay`);
   for (const id of ids) {
     assert.equal(by[id].pt, 5, `${id} must be worth five points`);
     assert.notEqual(by[id].th, '1.3', `${id} must be outside the right-of-way chapter`);
   }
   const html = window.testFive.categories();
   assert.match(html, /src=five&nav=categories/);
-  assert.match(html, /82/);
+  assert.match(html, /60/);
 });
