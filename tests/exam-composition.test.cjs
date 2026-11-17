@@ -114,18 +114,24 @@ test('the 20 fixed sets are deterministic and differ from one another', () => {
   assert.notEqual(first, second, 'different set numbers must produce different sets');
 });
 
-test('the non-right-of-way five-point focus contains exactly 97 Class B questions', () => {
+test('the non-right-of-way five-point focus removes generic other-user-mistake giveaways', () => {
   const window = load();
   const by = {};
   window.__CATALOG.forEach((q) => { by[q.id] = q; });
   const ids = window.testFive.ids();
-  assert.equal(ids.length, 97);
-  assert.equal(new Set(ids).size, 97, 'the focus must not repeat questions');
+  assert.equal(ids.length, 82);
+  assert.equal(new Set(ids).size, 82, 'the focus must not repeat questions');
+  for (const id of [
+    '1.1.02-005', '1.1.02-040-M', '1.1.02-041-M', '1.1.02-115',
+    '1.1.05-105', '1.1.07-009', '1.1.07-017', '1.1.07-146',
+    '1.2.06-004', '1.2.09-136-M', '1.2.20-109-M', '1.2.20-111-M',
+    '1.4.41-109', '2.1.07-111', '2.1.07-114-M',
+  ]) assert.equal(ids.includes(id), false, `${id} must be excluded from the focus`);
   for (const id of ids) {
     assert.equal(by[id].pt, 5, `${id} must be worth five points`);
     assert.notEqual(by[id].th, '1.3', `${id} must be outside the right-of-way chapter`);
   }
   const html = window.testFive.categories();
   assert.match(html, /src=five&nav=categories/);
-  assert.match(html, /97/);
+  assert.match(html, /82/);
 });

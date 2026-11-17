@@ -982,9 +982,29 @@
     INDEX.part2 = INDEX.themes.filter(function (x) { return x.part === 2; });
   }
   function qsIn(th, ch) { return CAT.filter(function (q) { return q._th === th && (!ch || q._ch === ch); }); }
+  /* Five-point questions whose correct answer is only a generic prediction that
+     another road user may make a mistake. These are deliberately kept out of
+     the focus drill; they remain available in their normal category. */
+  var FIVE_GIVEAWAY_IDS = {
+    "1.1.02-005": 1,
+    "1.1.02-040-M": 1,
+    "1.1.02-041-M": 1,
+    "1.1.02-115": 1,
+    "1.1.05-105": 1,
+    "1.1.07-009": 1,
+    "1.1.07-017": 1,
+    "1.1.07-146": 1,
+    "1.2.06-004": 1,
+    "1.2.09-136-M": 1,
+    "1.2.20-109-M": 1,
+    "1.2.20-111-M": 1,
+    "1.4.41-109": 1,
+    "2.1.07-111": 1,
+    "2.1.07-114-M": 1
+  };
   function fivePointPracticeIds() {
     return CAT_ALL.filter(function (q) {
-      return isClassB(q) && q.pt === 5 && q.th !== "1.3";
+      return isClassB(q) && q.pt === 5 && q.th !== "1.3" && !FIVE_GIVEAWAY_IDS[q.id];
     }).map(function (q) { return q.id; });
   }
 
@@ -2283,7 +2303,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v133 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v134 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
