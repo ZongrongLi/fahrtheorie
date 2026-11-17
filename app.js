@@ -1948,7 +1948,7 @@
         (wr.length ? '<a class="btn primary" href="#/practice?ids=' + encodeURIComponent(wr.join(",")) + '">' + esc(t("quiz.againWrong")) + '</a>' : "") +
         examResultBackLink() +
         '<button class="btn ghost" data-act="restart">' + esc(t("quiz.restart")) + '</button>' +
-        '<a class="btn ghost" href="#/categories">' + esc(t("quiz.backToCats")) + '</a>' +
+        '<a class="btn ghost" href="#/categories" data-act="back">' + esc(t("nav.back")) + '</a>' +
       '</div></section>';
   }
 
@@ -2037,6 +2037,7 @@
             '<span class="box">' + ic("check") + '</span><span class="opt-body">' + optBody(q, i) + '</span><span class="badge-k">' + L(p) + '</span></li>';
         }).join("") + '</ul>';
     return '<section class="quiz exam"><header class="quiz-top">' +
+      '<button class="iconbtn" data-act="back" title="' + esc(t("nav.back")) + '">' + ic("left") + '</button>' +
       '<button class="iconbtn" data-act="exam-abort" title="' + esc(t("exam.abort")) + '">' + ic("x") + '</button>' +
       '<div class="quiz-title"><strong>' + esc(t("exam.title")) + '</strong><span class="muted">' + esc(t("exam.answeredCount", { a: answered, n: 30 })) + '</span></div>' +
       '<div class="timer" data-role="timer">' + ic("clock") + mm + ':' + ss + '</div></header>' +
@@ -2118,7 +2119,8 @@
       '<div class="q-actions center">' +
       (wrong.length ? '<a class="btn primary" href="' + wrongHref + '">' + esc(t("quiz.againWrong")) + '</a>' : '') +
       '<a class="btn ghost" href="' + allHref + '">' + esc(t("exam.review")) + '</a>' +
-      '<button class="btn ghost" data-act="exam-start">' + esc(t("exam.newExam")) + '</button></div></section>' +
+      '<button class="btn ghost" data-act="exam-start">' + esc(t("exam.newExam")) + '</button>' +
+      '<a class="btn ghost" href="#/exam" data-act="back">' + ic("left") + esc(t("nav.back")) + '</a></div></section>' +
       (wrong.length ? '<section class="block"><header class="block-h"><h2>' + esc(t("wrong.title")) + '</h2><span class="muted">' + esc(t("wrong.count", { n: wrong.length })) + '</span></header>' +
         '<div class="wrong-list">' + wrongRows + '</div></section>' : '');
   }
@@ -2266,7 +2268,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v130 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v131 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -2854,7 +2856,8 @@
       return;
     }
     if (act === "exit") {
-      var exitFallback = session && session._p && session._p.nav === "history" ? "#/history" : (session && session.back ? session.back : "#/categories");
+      if (session && session._p && session._p.nav === "history") { go("#/history"); return; }
+      var exitFallback = session && session.back ? session.back : "#/categories";
       goBack(exitFallback); return;
     }
     if (act === "home") { go("#/home"); return; }

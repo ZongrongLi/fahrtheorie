@@ -25,7 +25,11 @@ const instrumented = appSource.replace(marker,
   '    testNav: { track: trackNavigation, back: goBack, stack: function () { return navStack.slice(); }, current: function () { return navCurrent; } },\n' +
   '    homeView: vHome, resumeQuestion: resumeQuestion, lastAnswered: lastAnswered,\n' +
   '    getState: function () { return state; }, setState: function (s) { state = s; },\n' +
-  '    getSession: function () { return session; }, setSession: function (s) { session = s; } };\n' + marker);
+  '    getSession: function () { return session; }, setSession: function (s) { session = s; } };\n' +
+  '  window.testViews = { categories: vCategories, cat: vCat, types: vSingleTypes,\n' +
+  '    examHome: vExamHome, examSets: vExamSets, examResult: vExamResult, history: vHistory,\n' +
+  '    wrong: vWrong, notes: vNotes, settings: vSettings, admin: vAdmin,\n' +
+  '    summary: vSummary, exam: vExam };\n' + marker);
 
 function stubNode() {
   return {
@@ -1020,4 +1024,49 @@ test('the in-app back action walks the navigation stack in exact reverse order',
   nav.track();
   nav.back();
   assert.equal(P.context.location.hash, '#/home');
+});
+
+test('every non-home view exposes a back control', () => {
+  const P = load();
+  const W = P.context.window.testWrong;
+  const V = P.context.window.testViews;
+  W.setState({ q: {}, notes: {}, tr: {}, ai: {}, days: {}, goal: 20, exams: [] });
+  W.setSession({
+    ids: ['1.1.01-001', '1.1.01-002'],
+    i: 0,
+    mode: 'exam',
+    answers: {
+      '1.1.01-001': { sel: [0], val: '', submitted: true, correct: true },
+      '1.1.01-002': { sel: [0], val: '', submitted: true, correct: false },
+    },
+    graded: true,
+    err: 3,
+    total: 7,
+    durationMs: 45 * 60 * 1000,
+    startedAt: Date.now() - 1000,
+  });
+  const pages = {
+    categories: V.categories(),
+    category: V.cat('1.1', '1.1.01'),
+    types: V.types(),
+    examHome: V.examHome(),
+    examSets: V.examSets(),
+    examResult: V.examResult(),
+    history: V.history(),
+    wrong: V.wrong('', '', ''),
+    notes: V.notes(),
+  };
+  for (const [name, html] of Object.entries(pages)) {
+    assert.match(html, /data-act="back"/, `${name} must expose back`);
+  }
+  W.setSession({
+    ids: ['1.1.01-001', '1.1.01-002'], i: 0, mode: 'exam', answers: {},
+    graded: false, durationMs: 45 * 60 * 1000, startedAt: Date.now() - 1000,
+  });
+  assert.match(V.exam(), /data-act="back"/, 'in-progress exam must expose back');
+  W.setSession({
+    ids: ['1.1.01-001', '1.1.01-002'], i: 2, mode: 'normal',
+    answers: { '1.1.01-001': { correct: true }, '1.1.01-002': { correct: false } },
+  });
+  assert.match(V.summary(), /data-act="back"/, 'practice summary must expose back');
 });
