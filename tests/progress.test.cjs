@@ -1070,3 +1070,11 @@ test('every non-home view exposes a back control', () => {
   });
   assert.match(V.summary(), /data-act="back"/, 'practice summary must expose back');
 });
+
+test('a BFCache pageshow rerenders the page after back navigation', () => {
+  const P = load();
+  P.context.location.hash = '#/history';
+  assert.ok(P.listeners.pageshow && P.listeners.pageshow.length, 'pageshow listener is registered');
+  P.listeners.pageshow.forEach((fn) => fn({ persisted: true }));
+  assert.match(P.nodes['#view'].innerHTML, /考试历史|Exam history|history\.title/);
+});

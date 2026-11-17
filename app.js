@@ -104,6 +104,11 @@
     var prev = navStack.length ? navStack[navStack.length - 1] : "";
     if (prev && typeof history !== "undefined" && typeof history.back === "function") {
       history.back();
+      if (typeof setTimeout === "function") {
+        setTimeout(function () {
+          if ((location.hash || "#/home") === prev) route();
+        }, 80);
+      }
       return;
     }
     if (prev) { navStack.pop(); navCurrent = prev; saveNavStack(); go(prev); return; }
@@ -2268,7 +2273,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v131 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v132 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
@@ -3179,6 +3184,8 @@
     route();
     if (prefs.scope === "all") ensureAllQ().then(function () { applyScope(); route(); renderTopbar(); });
     window.addEventListener("hashchange", route);
+    window.addEventListener("popstate", route);
+    window.addEventListener("pageshow", function (e) { if (e.persisted) route(); });
     fsRestore();
     syncUser();
     handlePaidReturn();
