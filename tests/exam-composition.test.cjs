@@ -8,7 +8,7 @@ const marker = '  window.__boot = boot;';
 assert.equal(appSource.split(marker).length, 2, 'boot marker must be unique');
 const instrumented = appSource.replace(marker,
   '  window.testExam = { buildExamIds: buildExamIds, examPool: examPool, rules: EXAM_RULES };\n' +
-  '  window.testFive = { ids: fivePointPracticeIds, categories: vCategories };\n' + marker);
+  '  window.testFive = { ids: fivePointPracticeIds, categories: vCategories, mistakes: vMistakes, mistakeIdsFromPool: mistakeIdsFromPool };\n' + marker);
 
 function stubNode() {
   return {
@@ -144,4 +144,25 @@ test('the non-right-of-way five-point focus removes generic other-user-mistake g
   const html = window.testFive.categories();
   assert.match(html, /src=five&nav=categories/);
   assert.match(html, /60/);
+});
+
+test('actual-mistake topic only keeps questions with a real wrong answer', () => {
+  const window = load();
+  const pool = [{ id: 'never' }, { id: 'wrong' }, { id: 'manual' }, { id: 'mastered' }];
+  const ids = window.testFive.mistakeIdsFromPool(pool, {
+    never: { a: 4, r: 4, w: 0 },
+    wrong: { a: 2, r: 0, w: 2, wrong: true },
+    manual: { a: 2, r: 2, w: 0, wrong: true },
+    mastered: { a: 3, r: 2, w: 1, wrong: false },
+  });
+  assert.deepEqual(ids, ['wrong', 'mastered']);
+});
+
+test('categories expose the actual-mistake topic and its three drills', () => {
+  const window = load();
+  const categories = window.testFive.categories();
+  assert.match(categories, /href="#\/mistakes"/);
+  const page = window.testFive.mistakes();
+  assert.match(page, /src=mistakes&nav=categories/);
+  assert.match(page, /Practise all/);
 });

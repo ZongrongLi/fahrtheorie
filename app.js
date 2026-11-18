@@ -1030,6 +1030,29 @@
       return isClassB(q) && q.pt === 5 && q.th !== "1.3" && !FIVE_GIVEAWAY_IDS[q.id];
     }).map(function (q) { return q.id; });
   }
+  /* A question belongs here only after a real wrong answer. A manual
+     "add to wrong book" flag alone is not an actual mistake. */
+  function mistakeIdsFromPool(pool, states) {
+    states = states || {};
+    return (pool || []).filter(function (q) {
+      var s = states[q.id];
+      return s && (Number(s.w) || 0) > 0;
+    }).sort(function (a, b) {
+      var sa = states[a.id] || {}, sb = states[b.id] || {};
+      return (Number(sb.w) || 0) - (Number(sa.w) || 0) ||
+        (sb.wrong === true ? 1 : 0) - (sa.wrong === true ? 1 : 0) ||
+        String(a.id).localeCompare(String(b.id));
+    }).map(function (q) { return q.id; });
+  }
+  function actualMistakePracticeIds() { return mistakeIdsFromPool(wrongPool(), state.q); }
+  function currentMistakePracticeIds() {
+    var ids = actualMistakePracticeIds();
+    return ids.filter(function (id) { return state.q[id] && state.q[id].wrong === true; });
+  }
+  function masteredMistakePracticeIds() {
+    var ids = actualMistakePracticeIds();
+    return ids.filter(function (id) { return !(state.q[id] && state.q[id].wrong === true); });
+  }
 
   /* ---------------- routing ---------------- */
   function go(hash) { location.hash = hash; }
@@ -1054,6 +1077,7 @@
     else if (view === "categories") app.innerHTML = vCategories();
     else if (view === "cat") app.innerHTML = vCat(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""));
     else if (view === "types") app.innerHTML = vSingleTypes();
+    else if (view === "mistakes") app.innerHTML = vMistakes();
     else if (view === "practice") { if (!session || session.key !== key) startFromRoute(query, key); app.innerHTML = vQuiz(); }
     else if (view === "wrong") app.innerHTML = vWrong(decodeURIComponent(h[1] || ""), decodeURIComponent(h[2] || ""), queryArgs.view || "", queryArgs.w || "");
     else if (view === "notes") app.innerHTML = vNotes();
@@ -1070,12 +1094,12 @@
     else if (view === "settings") app.innerHTML = vSettings();
     else if (view === "admin") app.innerHTML = vAdmin();
     else app.innerHTML = vHome();
-    var activeNav = view === "cat" ? "categories" : (view === "practice" ? (session && session.nav ? session.nav : "categories") : view);
+    var activeNav = (view === "cat" || view === "mistakes") ? "categories" : (view === "practice" ? (session && session.nav ? session.nav : "categories") : view);
     document.querySelectorAll("[data-nav]").forEach(function (el) {
       el.classList.toggle("is-active", el.getAttribute("data-nav") === activeNav);
     });
     paintResumeLink();
-    if (["home", "categories", "cat", "types", "wrong", "notes", "history", "sets", "settings", "admin"].indexOf(view) >= 0) { session = null; lastHash = location.hash || "#/home"; }
+    if (["home", "categories", "cat", "types", "mistakes", "wrong", "notes", "history", "sets", "settings", "admin"].indexOf(view) >= 0) { session = null; lastHash = location.hash || "#/home"; }
     mountMedia();
     window.scrollTo(0, 0);
     var main = document.getElementById("view"); if (main) main.focus({ preventScroll: true });
@@ -1226,17 +1250,41 @@
   function vCategories() {
     var fiveIds = fivePointPracticeIds();
     var fiveHref = "#/practice?ids=" + encodeURIComponent(fiveIds.join(",")) + "&src=five&nav=categories";
+    var mistakeIds = actualMistakePracticeIds();
     function part(title, list, start) {
       return '<section class="block"><header class="block-h"><h2>' + esc(title) + '</h2></header>' +
         '<div class="tile-grid">' + list.map(function (T, i) { return themeTile(T, start + i); }).join("") + '</div></section>';
     }
     return '<section class="page-h">' + backButton("#/home") + '<span class="eyebrow">' + ic("grid") + esc(t("cat.title")) + '</span><h1>' + esc(t("cat.title")) + '</h1><p class="lede">' + esc(t("cat.sub")) + '</p></section>' +
+      '<section class="block"><header class="block-h"><h2>' + esc(t("mistakes.title")) + '</h2><span class="muted">' + esc(t("mistakes.short")) + '</span></header>' +
+        '<article class="card settings-card"><p>' + esc(t("mistakes.lede", { n: mistakeIds.length, cur: currentMistakePracticeIds().length, mastered: masteredMistakePracticeIds().length })) + '</p>' +
+        '<div class="q-actions"><a class="btn primary" href="#/mistakes">' + ic("alert") + esc(t("mistakes.practiceAll", { n: mistakeIds.length })) + '</a></div></article></section>' +
       '<section class="block"><header class="block-h"><h2>' + esc(t("five.title")) + '</h2><span class="muted">' + esc(t("five.short")) + '</span></header>' +
         '<article class="card settings-card"><p>' + esc(t("five.lede", { n: fiveIds.length })) + '</p>' +
         '<div class="q-actions"><a class="btn primary" href="' + fiveHref + '">' + ic("right") + esc(t("five.practice", { n: fiveIds.length })) + '</a></div></article></section>' +
       '<section class="block"><header class="block-h"><h2>' + esc(t("types.title")) + '</h2><span class="muted">' + esc(t("types.short")) + '</span></header>' +
         '<div class="hero-cta"><a class="btn primary" href="#/types">' + ic("layers") + esc(t("home.types")) + '</a></div></section>' +
       part(t("cat.part1"), INDEX.part1, 0) + part(t("cat.part2"), INDEX.part2, 3);
+  }
+  function vMistakes() {
+    var all = actualMistakePracticeIds();
+    var current = currentMistakePracticeIds();
+    var mastered = masteredMistakePracticeIds();
+    function href(ids) {
+      return "#/practice?ids=" + encodeURIComponent(ids.join(",")) + "&src=mistakes&nav=categories";
+    }
+    return '<section class="page-h">' +
+        backButton("#/categories") +
+        '<span class="eyebrow">' + ic("alert") + esc(t("mistakes.title")) + '</span>' +
+        '<h1>' + esc(t("mistakes.title")) + '</h1>' +
+        '<p class="lede">' + esc(t("mistakes.lede", { n: all.length, cur: current.length, mastered: mastered.length })) + '</p>' +
+        '<div class="chips"><span class="chip">' + esc(t("mistakes.practiceAll", { n: all.length })) + '</span><span class="chip warn">' + esc(t("mistakes.practiceCurrent", { n: current.length })) + '</span><span class="chip">' + esc(t("mistakes.practiceMastered", { n: mastered.length })) + '</span></div>' +
+        '<div class="hero-cta">' +
+          '<a class="btn primary" href="' + href(all) + '">' + ic("right") + esc(t("mistakes.practiceAll", { n: all.length })) + '</a>' +
+          '<a class="btn ghost" href="' + href(current) + '">' + esc(t("mistakes.practiceCurrent", { n: current.length })) + '</a>' +
+          '<a class="btn ghost" href="' + href(mastered) + '">' + esc(t("mistakes.practiceMastered", { n: mastered.length })) + '</a>' +
+        '</div>' +
+      '</section>';
   }
   function vCat(th, ch) {
     var T = INDEX.byTheme[th]; if (!T) return vCategories();
@@ -1286,7 +1334,7 @@
       var limit = Number(p.n) || 0;
       if (limit > 0) ids = ids.slice(0, Math.min(ids.length, Math.floor(limit)));
     }
-    var ttl = p.src === "wrong" ? t("nav.wrong") : p.src === "exam" ? t("exam.title") : p.src === "real" ? t("home.realCheck") : p.src === "types" ? t("types.title") : p.src === "five" ? t("five.title") : sessionTitle(p);
+    var ttl = p.src === "wrong" ? t("nav.wrong") : p.src === "exam" ? t("exam.title") : p.src === "real" ? t("home.realCheck") : p.src === "types" ? t("types.title") : p.src === "five" ? t("five.title") : p.src === "mistakes" ? t("mistakes.title") : sessionTitle(p);
     openSession(ids, { c: p.c, ch: p.ch, m: p.m, mode: "normal", key: key, title: ttl });
     session._p = p;
     if (p.at) { var ix = session.ids.indexOf(p.at); if (ix >= 0) session.i = ix; }
@@ -2326,7 +2374,7 @@
         '<button class="btn ghost small danger" data-act="reset">' + ic("trash") + esc(t("settings.reset")) + '</button></div>') +
       card(t("settings.about"), '<p class="muted">' + esc(t("settings.aboutText")) + '</p><p class="muted">' + esc(t("home.disclaimer")) + '</p>' +
         '<p class="fineprint"><a href="privacy.html">' + esc(t("legal.privacy")) + '</a> · <a href="terms.html">' + esc(t("legal.terms")) + '</p>' +
-        '<p class="fineprint">build v135 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
+        '<p class="fineprint">build v136 · <a href="#/admin">' + esc(t("admin.entry")) + '</a></p>');
   }
 
   /* ---------------- admin: 用户管理（站长专用，中文硬编码，不进 i18n） ----------------
